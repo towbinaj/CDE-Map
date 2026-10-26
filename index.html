@@ -103,6 +103,11 @@
   #panelHead .dot { width: 14px; height: 14px; margin-top: 4px; }
   #pName { font-size: 17px; font-weight: 650; line-height: 1.25; text-wrap: balance; }
   #pType { font-size: 12px; color: var(--muted); margin-top: 2px; letter-spacing: .02em; }
+  #pDef { font-size: 13px; line-height: 1.4; margin-top: 6px; color: #c9ced6; }
+  #pDef[hidden] { display: none; }
+  .rel .def { display: block; margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--muted); }
+  .term { padding: 4px 6px; font-size: 13px; line-height: 1.4; color: #c9ced6; }
+  .term b { color: var(--text); font-weight: 600; }
   #pClose { margin-left: auto; height: 32px; min-width: 32px; padding: 0 10px; font-size: 13px; }
   #pActions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
   #pActions .btn { height: 32px; padding: 0 10px; font-size: 13px; }
@@ -150,11 +155,12 @@
 <section id="panel" aria-live="polite">
   <div id="panelHead">
     <span class="dot" id="pDot"></span>
-    <div><div id="pName"></div><div id="pType"></div></div>
+    <div><div id="pName"></div><div id="pType"></div><div id="pDef" hidden></div></div>
     <button id="pClose" class="btn">Close</button>
   </div>
   <div id="pActions">
     <button id="pTrace" class="btn" title="Switch between Trace and RSNA's focus view">Focus view</button>
+    <button id="pDefs" class="btn" aria-pressed="false" title="Show or hide definitions">Definitions</button>
     <div id="steps" role="group" aria-label="How many steps to follow" hidden>Steps
       <button class="btn" type="button" data-depth="1">1</button>
       <button class="btn" type="button" data-depth="2">2</button>
@@ -366,12 +372,15 @@
   var focus = null;        // { nodes:{}, edges:{}, context:{}, selected:id|null, type:str|null }
   var labelNodes = [];
 
-  function prettyPredicate(e) {
+  function termName(e) {
     var p = predicateOf(e) || e.label || "";
     p = p.replace(/^https?:\/\/[^#]*[\/#]/, "");
-    p = p.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase().trim().replace(/^sub class of$/, "subclass of");
+    return p.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase().trim().replace(/^sub class of$/, "subclass of") || "related to";
+  }
+  function prettyPredicate(e) {
+    var p = termName(e);
     if (e.narrowValues.length || String(e.title).indexOf("Narrowed to:") !== -1) p += " (narrowed)";
-    return p || "related to";
+    return p;
   }
   function prettyType(t) { return t.replace(/([a-z])([A-Z])/g, "$1 $2"); }
 
@@ -469,9 +478,7 @@
 
   // ---------- details panel ----------
   function showPanel(n, res) {
-    $("pDot").style.background = n.color;
-    $("pName").textContent = n.label;
-    $("pType").textContent = prettyType(n.type) + (n.shortId ? " · " + n.shortId : "");
+    conceptHeader(n);
     $("pActions").hidden = false; $("steps").hidden = true;
     var rels = $("rels"); rels.innerHTML = "";
     var direct = {}, second = [];
@@ -500,6 +507,7 @@
       second.sort(function (a, b) { return nodeById[a.from].label.localeCompare(nodeById[b.from].label) || nodeById[a.to].label.localeCompare(nodeById[b.to].label); })
         .forEach(function (e) { rels.appendChild(relButton(e.to, "↳", nodeById[e.from].label + " · " + prettyPredicate(e))); });
     }
+    addTerms(rels, Object.keys(res.edges).map(function (id) { return edgeById[id]; }));
     rels.scrollTop = 0;
     $("panel").classList.add("open");
     sizeGraph();
@@ -520,11 +528,67 @@
     var txt = document.createElement("span"); txt.textContent = n.label;
     b.appendChild(d); b.appendChild(dot); b.appendChild(txt);
     if (via) { var v = document.createElement("span"); v.className = "via"; v.textContent = " " + via; txt.appendChild(document.createElement("br")); txt.appendChild(v); }
+    if (defsOn && n.definition) { var df = document.createElement("span"); df.className = "def"; df.textContent = n.definition; txt.appendChild(df); }
     b.addEventListener("click", function () { selectNode(id, true); });
     return b;
   }
   function hidePanel() { $("panel").classList.remove("open"); sizeGraph(); }
   $("pClose").addEventListener("click", clearFocus);
+
+  // ---------- definitions ----------
+  // Concept definitions come with the map; relationship terms come from RSNA's list (graph/relationships.jsonl)
+  var RELS = "https://raw.githubusercontent.com/RSNA/ACR-RSNA-CDEs/next-gen-2026/docs/next-gen-schema/graph/relationships.jsonl";
+  var RELS_KEY = "/last-good-relationships.json";
+  var relDefs = {}, defsOn = false;
+  try { defsOn = localStorage.getItem("cde-defs") === "1"; } catch (e) { /* storage blocked */ }
+  $("pDefs").setAttribute("aria-pressed", defsOn ? "true" : "false");
+  function conceptHeader(n) {
+    $("pDot").style.background = n.color;
+    $("pName").textContent = n.label;
+    $("pType").textContent = prettyType(n.type) + (n.shortId ? " · " + n.shortId : "");
+    $("pDef").textContent = n.definition || "No definition provided.";
+    $("pDef").hidden = !defsOn;
+  }
+  function termDefinition(e) {
+    var p = predicateOf(e), id = p.replace(/^.*[\/#]/, "").toUpperCase();
+    if (relDefs[id]) return relDefs[id].definition;
+    if (id === "HAS_CATEGORY") return "Relates an AssessmentScheme to one of its categories."; // from RSNA's radcde-alpha.ttl; not in the list
+    if (id === "SUBCLASSOF") return "Is a kind of: the concept is a more specific kind of the one it points to (standard RDF Schema link).";
+    if (/radlex\.org/i.test(p)) return "RadLex anatomy relationship. RadLex gives no definition for it.";
+    return "No definition provided.";
+  }
+  // One line per relationship term used in the list, so definitions don't repeat on every row
+  function addTerms(rels, edges) {
+    if (!defsOn || !edges.length) return;
+    var seen = {}, terms = [];
+    edges.forEach(function (e) { var k = termName(e); if (!seen[k]) { seen[k] = true; terms.push({ name: k, def: termDefinition(e) }); } });
+    var h = document.createElement("div"); h.className = "group"; h.textContent = "Terms used";
+    rels.appendChild(h);
+    terms.sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (t) {
+      var d = document.createElement("div"); d.className = "term";
+      var b = document.createElement("b"); b.textContent = t.name;
+      d.appendChild(b); d.appendChild(document.createTextNode(" — " + t.def));
+      rels.appendChild(d);
+    });
+  }
+  function redrawPanel() { if (focus && focus.selected && $("panel").classList.contains("open")) selectNode(focus.selected, false); }
+  $("pDefs").addEventListener("click", function () {
+    defsOn = !defsOn;
+    this.setAttribute("aria-pressed", defsOn ? "true" : "false");
+    try { localStorage.setItem("cde-defs", defsOn ? "1" : "0"); } catch (e) { /* storage blocked */ }
+    redrawPanel();
+  });
+  // Loaded alongside the map; if GitHub can't be reached, the last copy read is used
+  function loadRelDefs(cache) {
+    return fetch(RELS, { cache: "no-cache" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); }).then(function (text) {
+      var defs = (window.CDEMapData && CDEMapData.parseRelationships || function () { return {}; })(text);
+      if (!Object.keys(defs).length) throw new Error("empty");
+      if (cache) cache.put(RELS_KEY, new Response(JSON.stringify(defs), { headers: { "content-type": "application/json" } })).catch(function () {});
+      return defs;
+    }).catch(function () {
+      return cache ? cache.match(RELS_KEY).then(function (r) { return r ? r.json() : {}; }).catch(function () { return {}; }) : {};
+    }).then(function (defs) { relDefs = defs || {}; if (defsOn) redrawPanel(); });
+  }
 
   // ---------- trace: everything that leads into and out of a concept ----------
   var traceOn = true, traceDepth = 0, traceIn = {}, traceOut = {}; // depth 0 = all steps
@@ -572,14 +636,13 @@
     setTypeButtons(null);
     refreshStyles();
 
-    $("pDot").style.background = n.color;
-    $("pName").textContent = n.label;
-    $("pType").textContent = prettyType(n.type) + (n.shortId ? " · " + n.shortId : "");
+    conceptHeader(n);
     $("pActions").hidden = false; $("steps").hidden = false;
     Array.prototype.forEach.call(document.querySelectorAll("#steps button"), function (b) { b.setAttribute("aria-pressed", Number(b.dataset.depth) === traceDepth ? "true" : "false"); });
     var rels = $("rels"); rels.innerHTML = "";
     traceSection(rels, up, "Comes from", "from", "←", true);
     traceSection(rels, down, "Goes to", "to", "→", false);
+    addTerms(rels, Object.keys(edges).map(function (eid) { return edgeById[eid]; }));
     rels.scrollTop = 0;
     $("panel").classList.add("open");
     sizeGraph();
@@ -809,6 +872,7 @@
 
   Promise.all([openCache(), fetchCommitDate()]).then(function (r) {
     var cache = r[0], date = r[1];
+    loadRelDefs(cache);
     return readGood(cache).then(function (good) {
       function useGood(reason) {
         if (good && good.data) {
