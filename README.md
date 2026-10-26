@@ -11,10 +11,11 @@ ACR-RSNA CDE team; this repository holds only the viewer.
 - If you are offline, it shows the last version it downloaded.
 - On iPhone: open the page in Safari, tap Share, then **Add to Home Screen**.
 - **Trace:** tap a concept to see everything that leads into it ("Comes from") and everything it leads to ("Goes to"), step by step. **Steps** limits how far it follows the arrows. **Focus view** switches to RSNA's own view of the concept's relationships.
+- **Definitions:** shows each concept's definition (from the map file) and, under **Terms used**, the definition of each relationship term (from RSNA's [`relationships.jsonl`](https://github.com/RSNA/ACR-RSNA-CDEs/blob/next-gen-2026/docs/next-gen-schema/graph/relationships.jsonl)). RadLex gives no definitions for its anatomy relationships.
 
 ## How it is kept working
 
 - The 3D drawing library ([3d-force-graph](https://github.com/vasturiano/3d-force-graph) 1.80.1, MIT license) is stored in `lib/`, so the viewer does not depend on an outside website.
-- A daily GitHub check (`.github/workflows/check-rsna-map.yml`) reads RSNA's latest map the same way the viewer does. If the viewer can no longer read it, or RSNA changed the focus rules this viewer copies, the check opens a GitHub issue here. It also runs whenever the code that reads the map changes, and can be run by hand from the **Actions** tab.
+- A daily GitHub check (`.github/workflows/check-rsna-map.yml`) reads RSNA's latest map the same way the viewer does. If the viewer can no longer read it or the list of relationship terms, or RSNA changed the focus rules this viewer copies, the check opens a GitHub issue here. It also runs whenever the code that reads the map changes, and can be run by hand from the **Actions** tab.
 
 This is a draft work product, not an official ACR or RSNA release.

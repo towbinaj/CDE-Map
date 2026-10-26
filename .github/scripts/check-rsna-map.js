@@ -11,6 +11,7 @@ var crypto = require("crypto");
 var mapData = require("../../map-data.js");
 
 var SOURCE = "https://raw.githubusercontent.com/RSNA/ACR-RSNA-CDEs/next-gen-2026/docs/next-gen-schema/alpha/visualizations/ontology_map.html";
+var RELS = "https://raw.githubusercontent.com/RSNA/ACR-RSNA-CDEs/next-gen-2026/docs/next-gen-schema/graph/relationships.jsonl";
 var RULES_BASELINE = path.join(__dirname, "..", "rsna-rules.sha256");
 // Concept types and links that the copied focus rules depend on
 var NEEDED_TYPES = ["DataElement", "Value", "FindingClass", "Diagnosis"];
@@ -24,7 +25,7 @@ function finish(status, title, lines) {
   console.log(status + ": " + title + "\n" + report);
 }
 
-function main(html) {
+function main(html, relsText) {
   var data;
   try { data = mapData.extractData(html); } catch (e) {
     return finish("broken", "The viewer can no longer read RSNA's map", [
@@ -55,6 +56,10 @@ function main(html) {
     problems.push("  To review: ask Claude to compare RSNA's `semanticNeighborhood` code with the copy in `index.html`, update it if needed, and set `.github/rsna-rules.sha256` to `" + rulesHash + "`.");
   }
 
+  if (relsText !== undefined && !Object.keys(mapData.parseRelationships(relsText)).length) {
+    problems.push("- RSNA's list of relationship terms (`graph/relationships.jsonl`) could not be read, so the viewer can't show their definitions. It may have been moved or renamed. Source: " + RELS);
+  }
+
   var counts = "Latest map: " + data.nodes.length + " concepts, " + data.edges.length + " links.";
   if (problems.length) {
     return finish("attention", "RSNA's map changed in a way the viewer may need to follow (" + rulesHash.slice(0, 8) + ")", [
@@ -65,19 +70,22 @@ function main(html) {
 }
 
 if (process.argv[2]) {
-  main(fs.readFileSync(process.argv[2], "utf8"));
+  main(fs.readFileSync(process.argv[2], "utf8"), process.argv[3] ? fs.readFileSync(process.argv[3], "utf8") : undefined);
 } else {
   // Three tries, a minute apart, so a brief GitHub hiccup is not reported as a problem
-  var download = function (triesLeft) {
-    return fetch(SOURCE, { cache: "no-store" }).then(function (r) {
+  var download = function (triesLeft, url) {
+    url = url || SOURCE;
+    return fetch(url, { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("GitHub returned " + r.status + " for the map file (it may have been moved, renamed or deleted)");
       return r.text();
     }).catch(function (e) {
       if (triesLeft <= 1) throw e;
-      return new Promise(function (wait) { setTimeout(wait, 60000); }).then(function () { return download(triesLeft - 1); });
+      return new Promise(function (wait) { setTimeout(wait, 60000); }).then(function () { return download(triesLeft - 1, url); });
     });
   };
-  download(3).then(main, function (e) {
+  download(3).then(function (html) {
+    return download(3, RELS).catch(function () { return ""; }).then(function (rels) { main(html, rels); });
+  }, function (e) {
     finish("broken", "The viewer can no longer download RSNA's map", [
       e.message + ".",
       "",

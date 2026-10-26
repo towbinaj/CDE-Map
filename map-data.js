@@ -13,7 +13,8 @@
       var color = typeof n.color === "string" ? n.color : (n.color && (n.color.background || n.color.border)) || "#7F8C8D";
       return {
         id: String(n.id), label: String(n.label || n.id), type: String(n.ontologyType || "generic").trim(),
-        color: color, size: Number(n.size) || 15, shortId: n.shortId || "", isPattern: n.isPatternNode === true
+        color: color, size: Number(n.size) || 15, shortId: n.shortId || "", isPattern: n.isPatternNode === true,
+        definition: definitionOf(n.title)
       };
     });
     var ids = {}; nodes.forEach(function (n) { ids[n.id] = true; });
@@ -33,6 +34,24 @@
     return { nodes: nodes, edges: edges, rawEdgeCount: rawEdges.length };
   }
 
+  // RSNA puts each concept's definition in its hover text, on a line starting "Definition:"
+  function definitionOf(title) {
+    var m = /(?:^|\n)Definition:[ \t]*([^\n]*)/.exec(String(title || ""));
+    var d = m ? m[1].trim() : "";
+    return d === "Not provided" ? "" : d;
+  }
+
+  // RSNA's list of relationship terms (graph/relationships.jsonl): one JSON object per line,
+  // with the term's id (e.g. HAS_VALUE), plain name and definition
+  function parseRelationships(text) {
+    var out = {};
+    String(text || "").split("\n").forEach(function (line) {
+      var r; try { r = JSON.parse(line); } catch (e) { return; }
+      if (r && r.id && r.definition) out[String(r.id).toUpperCase()] = { name: String(r.name || ""), definition: String(r.definition) };
+    });
+    return out;
+  }
+
   // The part of RSNA's page that holds their focus rules (the script with semanticNeighborhood).
   // The viewer carries a copy of those rules, so the daily check watches this part for changes.
   function rulesScript(html) {
@@ -41,7 +60,7 @@
     return rules == null ? null : rules.replace(/\r/g, "").trim();
   }
 
-  var api = { extractData: extractData, rulesScript: rulesScript };
+  var api = { extractData: extractData, rulesScript: rulesScript, parseRelationships: parseRelationships };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.CDEMapData = api;
 })(this);
