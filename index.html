@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>CDE Ontology Map</title>
-<meta name="description" content="Unofficial viewer of the draft ACR-RSNA next-gen CDE ontology map, loaded live from the RSNA GitHub repository.">
-<meta name="theme-color" content="#16181d">
+<meta name="description" content="Unofficial 3D viewer of the draft ACR-RSNA next-gen CDE ontology map, loaded live from the RSNA GitHub repository.">
+<meta name="theme-color" content="#07090f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -14,228 +14,713 @@
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
-  /* Layout: a thin status strip on top, the map filling the rest of the screen */
+  /* Layout: full-screen 3D map; a slim top bar with search and controls; details slide up from the bottom */
   :root {
-    --space: #16181d;
-    --strip: #1f2228;
-    --text: #e7e9ec;
-    --muted: #9aa1ab;
+    --space: #07090f;
+    --glass: rgba(18, 22, 31, 0.86);
+    --line: rgba(255, 255, 255, 0.10);
+    --text: #e8eaee;
+    --muted: #9aa2ae;
+    --accent: #7cc4ff;
     --warn: #f0b429;
     --error: #ef6b6b;
     --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    --top: env(safe-area-inset-top, 0px);
+    --bottom: env(safe-area-inset-bottom, 0px);
     color-scheme: dark;
   }
-  html, body { height: 100%; margin: 0; background: var(--space); color: var(--text); font-family: var(--font); }
-  body { display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); box-sizing: border-box; }
-  #strip {
-    flex: 0 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    padding: 6px 16px; background: var(--strip); font-size: 12px; line-height: 1.35; color: var(--muted);
-    border-bottom: 1px solid #2c3038;
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--space); color: var(--text); font-family: var(--font); overflow: hidden; -webkit-tap-highlight-color: transparent; }
+  #stars, #graph, #labels { position: fixed; inset: 0; }
+  #labels { pointer-events: none; z-index: 2; }
+  #graph { z-index: 1; }
+
+  #bar {
+    position: fixed; z-index: 5; left: 0; right: 0; top: 0;
+    padding: calc(var(--top) + 8px) 12px 8px; display: flex; gap: 8px; align-items: center;
+    background: linear-gradient(to bottom, rgba(7,9,15,0.92), rgba(7,9,15,0.55) 75%, rgba(7,9,15,0));
   }
-  #strip strong { color: var(--text); font-weight: 600; }
-  #status { margin-left: auto; font-variant-numeric: tabular-nums; }
+  #searchWrap { position: relative; flex: 1 1 auto; min-width: 0; }
+  #search {
+    width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--glass); color: var(--text); font-size: 16px; outline: none;
+  }
+  #search:focus { border-color: var(--accent); }
+  #results {
+    position: absolute; left: 0; right: 0; top: 44px; max-height: 50vh; overflow-y: auto;
+    background: #12161f; border: 1px solid var(--line); border-radius: 10px; display: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+  }
+  #results.open { display: block; }
+  #results button {
+    display: flex; gap: 8px; align-items: center; width: 100%; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--line);
+    background: transparent; color: var(--text); text-align: left; font-size: 15px; cursor: pointer;
+  }
+  #results button:active, #results button:hover { background: rgba(124,196,255,.12); }
+  #results .none { padding: 12px; color: var(--muted); font-size: 14px; }
+  .btn {
+    flex: 0 0 auto; height: 40px; min-width: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--glass); color: var(--text); font-size: 14px; cursor: pointer;
+  }
+  .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .btn:focus-visible, #results button:focus-visible, .rel:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  #status {
+    position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 54px);
+    font-size: 12px; color: var(--muted); pointer-events: none; text-shadow: 0 1px 3px #000;
+  }
   #status.warn { color: var(--warn); }
   #status.error { color: var(--error); }
-  #strip a { color: var(--muted); }
-  #frame { flex: 1 1 auto; width: 100%; border: 0; display: block; min-height: 0; background: var(--space); }
-  #message {
-    flex: 1 1 auto; display: flex; align-items: center; justify-content: center; text-align: center;
-    padding: 24px 16px; font-size: 15px; color: var(--muted);
+
+  #types {
+    position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 76px);
+    display: none; flex-wrap: wrap; gap: 6px; max-height: 40vh; overflow-y: auto;
+    padding: 8px; background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
   }
-  #message[hidden], #frame[hidden] { display: none; }
-  #strip .short { display: none; }
-  @media (max-width: 600px) { #strip .long { display: none; } #strip .short { display: inline; } }
+  #types.open { display: flex; }
+  #types button {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 999px;
+    border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 12px; cursor: pointer;
+  }
+  #types button.active { border-color: #fff; background: rgba(255,255,255,.08); }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+
+  #panel {
+    position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; max-height: 46vh;
+    display: flex; flex-direction: column;
+    background: var(--glass); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line); border-radius: 16px 16px 0 0;
+    padding: 12px 14px calc(var(--bottom) + 12px);
+    transform: translateY(105%); transition: transform .25s ease;
+  }
+  #panel.open { transform: translateY(0); }
+  @media (min-width: 820px) {
+    #panel { left: auto; right: 12px; top: calc(var(--top) + 64px); bottom: 12px; width: 360px; max-height: none; border-radius: 14px; border: 1px solid var(--line); transform: translateX(110%); }
+    #panel.open { transform: translateX(0); }
+    #types { right: auto; max-width: 560px; }
+  }
+  #panelHead { display: flex; align-items: flex-start; gap: 10px; }
+  #panelHead .dot { width: 14px; height: 14px; margin-top: 4px; }
+  #pName { font-size: 17px; font-weight: 650; line-height: 1.25; text-wrap: balance; }
+  #pType { font-size: 12px; color: var(--muted); margin-top: 2px; letter-spacing: .02em; }
+  #pClose { margin-left: auto; height: 32px; min-width: 32px; padding: 0 10px; font-size: 13px; }
+  #rels { overflow-y: auto; margin-top: 10px; -webkit-overflow-scrolling: touch; }
+  .group { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .rel {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 6px; border: 0; border-radius: 8px;
+    background: transparent; color: var(--text); font-size: 15px; text-align: left; cursor: pointer;
+  }
+  .rel:hover, .rel:active { background: rgba(124,196,255,.12); }
+  .rel .dir { color: var(--muted); font-size: 13px; width: 16px; flex: 0 0 auto; text-align: center; }
+  .rel .via { color: var(--muted); font-size: 13px; }
+  #note { margin-top: 10px; font-size: 11px; color: var(--muted); }
+  #note a { color: var(--muted); }
+
+  #message { position: fixed; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--muted); font-size: 15px; pointer-events: none; }
+  #message[hidden] { display: none; }
+  @media (prefers-reduced-motion: reduce) { #panel { transition: none; } }
 </style>
 </head>
 <body>
-<div id="strip">
-  <span><strong>CDE Ontology Map</strong> <span class="short">· unofficial viewer</span><span class="long">· unofficial viewer of the draft ACR-RSNA next-gen map, loaded live from the <a href="https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/alpha/visualizations" target="_blank" rel="noopener">RSNA repository</a></span></span>
-  <span id="status">Checking GitHub for the latest map…</span>
-</div>
-<div id="message">Loading the map…</div>
-<iframe id="frame" title="CDE ontology map" hidden></iframe>
+<canvas id="stars" aria-hidden="true"></canvas>
+<div id="graph" aria-label="3D map of CDE concepts"></div>
+<canvas id="labels" aria-hidden="true"></canvas>
 
+<div id="bar">
+  <div id="searchWrap">
+    <input id="search" type="search" autocomplete="off" placeholder="Search concepts" aria-label="Search concepts">
+    <div id="results" role="listbox"></div>
+  </div>
+  <button id="typesBtn" class="btn" aria-pressed="false" title="Highlight a concept type">Types</button>
+  <button id="spinBtn" class="btn" aria-pressed="false" title="Spin the map">Spin</button>
+  <button id="fitBtn" class="btn" title="Show the whole map">Reset</button>
+</div>
+<div id="status">Checking GitHub for the latest map…</div>
+<div id="types" role="group" aria-label="Concept types"></div>
+<div id="message">Loading the map…</div>
+
+<section id="panel" aria-live="polite">
+  <div id="panelHead">
+    <span class="dot" id="pDot"></span>
+    <div><div id="pName"></div><div id="pType"></div></div>
+    <button id="pClose" class="btn">Close</button>
+  </div>
+  <div id="rels"></div>
+  <div id="note">Unofficial viewer of the draft ACR-RSNA next-gen map, loaded live from the <a href="https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/alpha/visualizations" target="_blank" rel="noopener">RSNA repository</a>.</div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1.80.1/dist/3d-force-graph.min.js"></script>
 <script>
 (function () {
   "use strict";
   var SOURCE = "https://raw.githubusercontent.com/RSNA/ACR-RSNA-CDEs/next-gen-2026/docs/next-gen-schema/alpha/visualizations/ontology_map.html";
   var COMMITS = "https://api.github.com/repos/RSNA/ACR-RSNA-CDEs/commits?sha=next-gen-2026&per_page=1&path=docs/next-gen-schema/alpha/visualizations/ontology_map.html";
-  var CACHE = "cde-map-v1";
-  var GOOD_KEY = "/last-good-map.html";
-  var LOAD_TIMEOUT_MS = 150000;
+  var CACHE = "cde-map-v2";
+  var GOOD_KEY = "/last-good-map.json";
+  var DIM = "#262b35";
+  var CONTEXT_DIM = "#5b6372";
 
-  var statusEl = document.getElementById("status");
-  var messageEl = document.getElementById("message");
-  var frame = document.getElementById("frame");
+  var $ = function (id) { return document.getElementById(id); };
+  var statusEl = $("status"), messageEl = $("message");
 
-  function setStatus(text, kind) {
-    statusEl.textContent = text;
-    statusEl.className = kind || "";
-  }
+  function setStatus(text, kind) { statusEl.textContent = text; statusEl.className = kind || ""; }
 
-  // Phone-friendly adjustments injected into the RSNA page
-  var MOBILE_CSS = [
-    "<meta name='viewport' content='width=device-width,initial-scale=1'>",
-    "<style>",
-    "html,body{height:100%;background:#1a1a1a}",
-    "body>center{display:none}",
-    ".card{display:flex;flex-direction:column;height:100%;width:100%}",
-    "#ontology-toolbar{flex:0 0 auto;color-scheme:light}",
-    "#mynetwork{flex:1 1 auto;height:auto !important;min-height:0;float:none !important;border:0 !important}",
-    "#loadingBar{height:100% !important}",
-    "#ontology-type-filter-title{cursor:pointer;user-select:none}",
-    "#ontology-type-filter-title::after{content:' \\25BE'}",
-    "#ontology-type-filter.collapsed #ontology-type-buttons{display:none}",
-    "#ontology-type-filter.collapsed #ontology-type-filter-title{margin-bottom:2px}",
-    "#ontology-type-filter.collapsed #ontology-type-filter-title::after{content:' \\25B8'}",
-    "@media (max-width:760px){",
-    " div.vis-network div.vis-navigation{display:none !important}",
-    " #ontology-toolbar{flex-wrap:wrap !important;height:auto !important;padding:8px 10px !important;gap:6px !important}",
-    " #ontology-search-wrap{flex:1 1 100% !important;min-width:0 !important;width:100% !important}",
-    " #ontology-search{font-size:16px !important}",
-    " #ontology-controls{flex-wrap:wrap;gap:6px}",
-    " #ontology-controls button,.ontology-reset-selection{height:34px !important;padding:0 9px !important;font-size:13px !important;line-height:32px !important}",
-    " #ontology-type-filter{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));width:auto !important;max-height:34vh;overflow-y:auto;padding:6px}",
-    " .outerBorder{left:50%;top:30vh !important;margin:0 !important;transform:translateX(-50%) scale(.55)}",
-    "}",
-    "</style>"
-  ].join("\n");
-
-  var MOBILE_JS = "<script>(function(){var f=document.getElementById('ontology-type-filter');var t=document.getElementById('ontology-type-filter-title');" +
-    "if(f&&t){if(window.matchMedia&&window.matchMedia('(max-width:760px)').matches)f.classList.add('collapsed');" +
-    "t.addEventListener('click',function(){f.classList.toggle('collapsed')});}})();<\/script>";
-
-  function looksLikeMap(html) {
-    return typeof html === "string" &&
-      html.indexOf("new vis.DataSet") !== -1 &&
-      html.indexOf('id="mynetwork"') !== -1;
-  }
-
-  var ERROR_TRAP = "<script>window.__mapErrors=[];window.addEventListener('error',function(e){window.__mapErrors.push(e.message||'unknown error')});<\/script>";
-
-  function adapt(html) {
-    var out = html;
-    out = /<head[^>]*>/i.test(out) ? out.replace(/<head[^>]*>/i, function (m) { return m + ERROR_TRAP; }) : ERROR_TRAP + out;
-    out = /<\/head>/i.test(out) ? out.replace(/<\/head>/i, MOBILE_CSS + "\n</head>") : MOBILE_CSS + out;
-    out = /<\/body>/i.test(out) ? out.replace(/<\/body>(?![\s\S]*<\/body>)/i, MOBILE_JS + "\n</body>") : out + MOBILE_JS;
-    return out;
-  }
-
-  // Render a map version and report whether it finished loading without errors
-  function render(html) {
-    return new Promise(function (resolve) {
-      var settled = false;
-      function done(ok, why) {
-        if (settled) return;
-        settled = true;
-        clearInterval(poll);
-        clearTimeout(timer);
-        resolve({ ok: ok, why: why });
+  // ---------- starfield ----------
+  (function stars() {
+    var c = $("stars"), ctx = c.getContext("2d");
+    function draw() {
+      var dpr = window.devicePixelRatio || 1, w = innerWidth, h = innerHeight;
+      c.width = w * dpr; c.height = h * dpr; c.style.width = w + "px"; c.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var g = ctx.createRadialGradient(w * 0.5, h * 0.55, 0, w * 0.5, h * 0.55, Math.max(w, h) * 0.75);
+      g.addColorStop(0, "#111827"); g.addColorStop(1, "#05070c");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+      var seed = 42; function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+      var n = Math.round(w * h / 2600);
+      for (var i = 0; i < n; i++) {
+        var r = rnd() < 0.92 ? 0.6 : 1.2;
+        ctx.globalAlpha = 0.25 + rnd() * 0.6;
+        ctx.fillStyle = rnd() < 0.15 ? "#bcd7ff" : "#ffffff";
+        ctx.beginPath(); ctx.arc(rnd() * w, rnd() * h, r, 0, 6.283); ctx.fill();
       }
-      frame.hidden = false;
-      messageEl.hidden = true;
-      frame.srcdoc = adapt(html);
-      var poll = setInterval(function () {
-        try {
-          var doc = frame.contentDocument;
-          if (!doc) return;
-          var errs = frame.contentWindow.__mapErrors;
-          if (errs && errs.length) { done(false, "the page reported an error: " + errs[0]); return; }
-          var bar = doc.getElementById("loadingBar");
-          var buttons = doc.querySelectorAll("#ontology-type-buttons button").length;
-          var network = frame.contentWindow.network;
-          if (bar && doc.readyState === "complete" && network &&
-              frame.contentWindow.getComputedStyle(bar).display === "none") {
-            done(buttons > 0, buttons > 0 ? "" : "the map loaded without its controls");
-          }
-        } catch (e) { /* keep waiting */ }
-      }, 500);
-      var timer = setTimeout(function () { done(false, "the map did not finish loading"); }, LOAD_TIMEOUT_MS);
+      ctx.globalAlpha = 1;
+    }
+    draw(); addEventListener("resize", draw);
+  })();
+
+  // ---------- loading the RSNA data ----------
+  function extractData(html) {
+    var mn = /nodes = new vis\.DataSet\((\[[\s\S]*?\])\);/.exec(html);
+    var me = /edges = new vis\.DataSet\((\[[\s\S]*?\])\);/.exec(html);
+    if (!mn || !me) throw new Error("the map's data format changed");
+    var rawNodes = JSON.parse(mn[1]), rawEdges = JSON.parse(me[1]);
+    if (!rawNodes.length) throw new Error("the map has no concepts");
+    var nodes = rawNodes.map(function (n) {
+      var color = typeof n.color === "string" ? n.color : (n.color && (n.color.background || n.color.border)) || "#7F8C8D";
+      return {
+        id: String(n.id), label: String(n.label || n.id), type: String(n.ontologyType || "generic").trim(),
+        color: color, size: Number(n.size) || 15, shortId: n.shortId || "", isPattern: n.isPatternNode === true
+      };
     });
+    var ids = {}; nodes.forEach(function (n) { ids[n.id] = true; });
+    var edges = [];
+    rawEdges.forEach(function (e, i) {
+      var from = String(e.from), to = String(e.to);
+      if (!ids[from] || !ids[to]) return;
+      var color = typeof e.color === "string" ? e.color : (e.color && e.color.color) || "#8a93a3";
+      edges.push({
+        id: "e" + i, source: from, target: to, from: from, to: to, color: color,
+        nativePredicate: e.nativePredicate || "", label: e.label || "", title: e.title || "",
+        inversePredicate: e.inversePredicate || "", semanticCategory: e.semanticCategory || "",
+        narrowValues: Array.isArray(e.narrowValues) ? e.narrowValues.map(String) : [],
+        isPattern: e.isPatternEdge === true
+      });
+    });
+    return { nodes: nodes, edges: edges };
   }
 
-  function openCache() {
-    if (!("caches" in window)) return Promise.resolve(null);
-    return caches.open(CACHE).catch(function () { return null; });
-  }
-
+  function openCache() { return ("caches" in window) ? caches.open(CACHE).catch(function () { return null; }) : Promise.resolve(null); }
   function readGood(cache) {
     if (!cache) return Promise.resolve(null);
-    return cache.match(GOOD_KEY).then(function (r) {
-      if (!r) return null;
-      return r.text().then(function (text) {
-        return { html: text, date: r.headers.get("x-map-date") || "" };
+    return cache.match(GOOD_KEY).then(function (r) { return r ? r.json() : null; }).catch(function () { return null; });
+  }
+  function saveGood(cache, payload) {
+    if (!cache) return;
+    cache.put(GOOD_KEY, new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } })).catch(function () {});
+  }
+  function fetchCommitDate() {
+    return fetch(COMMITS, { cache: "no-cache" }).then(function (r) { return r.ok ? r.json() : []; }).then(function (j) {
+      var d = j && j[0] && j[0].commit && j[0].commit.committer && j[0].commit.committer.date;
+      return d ? new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+    }).catch(function () { return ""; });
+  }
+  function hashString(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
+
+  // ---------- RSNA focus rules (ported from the RSNA ontology_map.html controls) ----------
+  var nodeById = {}, edgeIndex = {};
+  function typeOf(id) { var n = nodeById[id]; return n ? n.type : "generic"; }
+  function otherEnd(e, id) { return e.from === id ? e.to : e.from; }
+  function normLabel(e) { return String(e.nativePredicate || e.label || e.title || "").trim().toUpperCase(); }
+  function semCat(e) { return String(e.semanticCategory || "").trim().toUpperCase(); }
+  function predicateOf(e) { return String(e.nativePredicate || e.label || "").trim(); }
+  var SCOPED = { "SCOPED_TO": 1, "SCOPED_TO_CLASS": 1, "SCOPED_TO_REGION": 1, "SCOPED_TO_SPECIFIC": 1 };
+
+  function semanticNeighborhood(start) {
+    var res = { nodes: {}, edges: {} };
+    function addNode(id) { if (id != null) res.nodes[id] = true; }
+    function addEdge(e) { if (!e) return; res.edges[e.id] = true; addNode(e.from); addNode(e.to); }
+    function isDEValue(e, de) { return typeOf(otherEnd(e, de)) === "Value" && normLabel(e) === "HAS_VALUE"; }
+    function schemeCategories(hostId) {
+      (edgeIndex[hostId] || []).forEach(function (e) {
+        var s = otherEnd(e, hostId);
+        if (typeOf(s) !== "AssessmentScheme") return;
+        (edgeIndex[s] || []).forEach(function (e2) { if (typeOf(otherEnd(e2, s)) === "AssessmentCategory") addEdge(e2); });
       });
-    }).catch(function () { return null; });
+    }
+    var t = typeOf(start);
+    addNode(start);
+    var list = edgeIndex[start] || [];
+
+    if (t === "DataElement") {
+      list.forEach(function (e) {
+        var nt = typeOf(otherEnd(e, start)), l = normLabel(e);
+        if (nt === "Value" && l === "HAS_VALUE") return addEdge(e);
+        if ((nt === "FindingClass" || nt === "Diagnosis") && l === "HAS_DATA_ELEMENT") return addEdge(e);
+        if (SCOPED[l]) return addEdge(e);
+      });
+      return res;
+    }
+    if (t === "Value") {
+      var des = [];
+      list.forEach(function (e) {
+        var nb = otherEnd(e, start), nt = typeOf(nb), l = normLabel(e);
+        if (nt === "DataElement" && l === "HAS_VALUE") { addEdge(e); des.push(nb); return; }
+        if ((nt === "FindingClass" || nt === "Diagnosis") && l === "HAS_VALUE_CONSTRAINT") addEdge(e);
+      });
+      des.forEach(function (de) {
+        (edgeIndex[de] || []).forEach(function (e) {
+          var nt = typeOf(otherEnd(e, de)), l = normLabel(e);
+          if (nt === "Value" && l === "HAS_VALUE") return addEdge(e);
+          if ((nt === "FindingClass" || nt === "Diagnosis") && l === "HAS_DATA_ELEMENT") addEdge(e);
+        });
+      });
+      return res;
+    }
+    if (t === "FindingClass") {
+      var fdes = [], narrows = {};
+      list.forEach(function (e) {
+        var nb = otherEnd(e, start), nt = typeOf(nb), l = normLabel(e);
+        if (["Diagnosis", "AssessmentScheme", "AssessmentCategory", "AnatomicLocation", "Modality", "Subspecialty", "FindingClass"].indexOf(nt) !== -1) return addEdge(e);
+        if (nt === "DataElement" && l === "HAS_DATA_ELEMENT") {
+          addEdge(e); fdes.push(nb);
+          var nv = e.narrowValues.slice();
+          if (!nv.length) {
+            var line = String(e.title || "").split("\n").filter(function (x) { return x.indexOf("Narrowed to:") === 0; })[0];
+            if (line) {
+              var names = line.replace("Narrowed to:", "").split(",").map(function (x) { return x.trim(); });
+              allNodes.forEach(function (c) { if (c.type === "Value" && names.indexOf(c.label.trim()) !== -1) nv.push(c.id); });
+            }
+          }
+          if (nv.length) { narrows[nb] = {}; nv.forEach(function (v) { narrows[nb][v] = true; }); }
+          return;
+        }
+        if (nt === "Value" && l === "HAS_VALUE_CONSTRAINT") return addEdge(e);
+      });
+      fdes.forEach(function (de) {
+        (edgeIndex[de] || []).forEach(function (e) {
+          if (!isDEValue(e, de)) return;
+          var allowed = narrows[de];
+          if (!allowed || allowed[otherEnd(e, de)]) addEdge(e);
+        });
+      });
+      schemeCategories(start);
+      var patterns = {};
+      list.forEach(function (e) { if (e.isPattern) { patterns[otherEnd(e, start)] = true; addEdge(e); } });
+      Object.keys(patterns).forEach(function (p) {
+        (edgeIndex[p] || []).forEach(function (e) { if (e.isPattern && typeOf(otherEnd(e, p)) === "FindingClass") addEdge(e); });
+      });
+      return res;
+    }
+    if (t === "Diagnosis") {
+      var ddes = [];
+      list.forEach(function (e) {
+        var nb = otherEnd(e, start), nt = typeOf(nb), l = normLabel(e);
+        if (["Diagnosis", "FindingClass", "AssessmentScheme", "AssessmentCategory", "Modality", "Subspecialty"].indexOf(nt) !== -1) return addEdge(e);
+        if (nt === "DataElement" && l === "HAS_DATA_ELEMENT") { addEdge(e); ddes.push(nb); return; }
+        if (nt === "Value" && l === "HAS_VALUE_CONSTRAINT") return addEdge(e);
+        if (SCOPED[l]) return addEdge(e);
+      });
+      ddes.forEach(function (de) { (edgeIndex[de] || []).forEach(function (e) { if (isDEValue(e, de)) addEdge(e); }); });
+      schemeCategories(start);
+      return res;
+    }
+    if (t === "AssessmentScheme" || t === "AssessmentCategory") {
+      list.forEach(function (e) {
+        var nt = typeOf(otherEnd(e, start));
+        if (["FindingClass", "Diagnosis", "AssessmentScheme", "AssessmentCategory"].indexOf(nt) !== -1) addEdge(e);
+      });
+      return res;
+    }
+    list.forEach(addEdge); // Measurement and every other type: direct relationships
+    return res;
   }
 
-  function saveGood(cache, html, date) {
-    if (!cache) return Promise.resolve();
-    var headers = { "content-type": "text/html; charset=utf-8", "x-map-date": date || "" };
-    return cache.put(GOOD_KEY, new Response(html, { headers: headers })).catch(function () {});
+  function collapseReciprocal(res, start) {
+    var rel = Object.keys(res.edges).map(function (id) { return edgeById[id]; });
+    var out = {};
+    rel.forEach(function (e) { if (e.from === start) out[e.to + "||" + predicateOf(e)] = true; });
+    rel.forEach(function (e) {
+      if (e.to !== start || !e.inversePredicate) return;
+      if (out[e.from + "||" + e.inversePredicate]) delete res.edges[e.id];
+    });
+    // keep only nodes still reached by a shown edge
+    var keep = {}; keep[start] = true;
+    Object.keys(res.edges).forEach(function (id) { var e = edgeById[id]; keep[e.from] = true; keep[e.to] = true; });
+    res.nodes = keep;
   }
 
-  function fetchLatest() {
-    return fetch(SOURCE, { cache: "no-cache" }).then(function (r) {
-      if (!r.ok) throw new Error("GitHub returned " + r.status);
-      return r.text();
+  function addMeasurements(res, start) {
+    var t = typeOf(start);
+    if (t !== "FindingClass" && t !== "Diagnosis") return;
+    (edgeIndex[start] || []).forEach(function (e) {
+      if (semCat(e) === "HAS_MEASUREMENT" || normLabel(e) === "HAS_MEASUREMENT") {
+        res.edges[e.id] = true; res.nodes[e.from] = true; res.nodes[e.to] = true;
+      }
     });
   }
 
-  function fetchCommitDate() {
-    return fetch(COMMITS, { cache: "no-cache" }).then(function (r) {
-      if (!r.ok) return "";
-      return r.json().then(function (j) {
-        var d = j && j[0] && j[0].commit && j[0].commit.committer && j[0].commit.committer.date;
-        return d ? new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
-      });
-    }).catch(function () { return ""; });
+  // ---------- state ----------
+  var Graph = null, allNodes = [], allEdges = [], edgeById = {};
+  var focus = null;        // { nodes:{}, edges:{}, context:{}, selected:id|null, type:str|null }
+  var labelNodes = [];
+
+  function prettyPredicate(e) {
+    var p = predicateOf(e) || e.label || "";
+    p = p.replace(/^https?:\/\/[^#]*[\/#]/, "");
+    p = p.replace(/_/g, " ").toLowerCase().trim();
+    if (e.narrowValues.length || String(e.title).indexOf("Narrowed to:") !== -1) p += " (narrowed)";
+    return p || "related to";
+  }
+  function prettyType(t) { return t.replace(/([a-z])([A-Z])/g, "$1 $2"); }
+
+  function nodeColor(n) {
+    if (!focus) return n.color;
+    if (focus.nodes[n.id]) return n.color;
+    if (focus.context && focus.context[n.id]) return CONTEXT_DIM;
+    return DIM;
   }
 
-  function label(date) { return date ? "Map version of " + date : "Latest map"; }
-
-  function showFallback(good, reason) {
-    if (good) {
-      setStatus(reason + " Showing the last working copy" + (good.date ? " (" + good.date + ")" : "") + ".", "warn");
-      return render(good.html);
+  function refreshStyles() {
+    if (!Graph) return;
+    Graph.nodeColor(nodeColor).nodeVisibility(Graph.nodeVisibility())
+      .linkVisibility(function (l) { return !l.isPattern || (focus && focus.edges[l.id]); })
+      .linkColor(function (l) { return focus ? (focus.edges[l.id] ? l.color : "rgba(0,0,0,0)") : l.color; })
+      .linkWidth(function (l) { return focus && focus.edges[l.id] ? 0.6 : 0; })
+      .linkOpacity(focus ? 0.9 : 0.28)
+      .linkDirectionalArrowLength(function (l) { return focus && focus.edges[l.id] ? 3.5 : 0; })
+      .linkDirectionalParticles(function (l) { return focus && focus.selected && focus.edges[l.id] ? 2 : 0; });
+    labelNodes = [];
+    if (focus && focus.selected) {
+      var direct = {};
+      Object.keys(focus.edges).forEach(function (id) { var e = edgeById[id]; if (e.from === focus.selected) direct[e.to] = 1; if (e.to === focus.selected) direct[e.from] = 1; });
+      var rank = function (n) { return n.id === focus.selected ? 0 : (direct[n.id] ? 1 : 2); };
+      labelNodes = allNodes.filter(function (n) { return focus.nodes[n.id]; }).sort(function (a, b) { return rank(a) - rank(b); });
     }
-    frame.hidden = true;
-    messageEl.hidden = false;
-    messageEl.textContent = reason + " Check your connection and try again.";
-    setStatus("Could not load the map", "error");
-    return Promise.resolve();
   }
 
-  Promise.all([openCache(), fetchCommitDate()]).then(function (res) {
-    var cache = res[0], date = res[1];
-    return readGood(cache).then(function (good) {
-      return fetchLatest().then(function (html) {
-        if (!looksLikeMap(html)) {
-          return showFallback(good, "The newest file on GitHub is not a map this viewer can show.");
-        }
-        if (good && good.html === html) {
-          setStatus(label(good.date || date) + " · up to date");
-          return render(html);
-        }
-        setStatus("Loading the newest map from GitHub…");
-        return render(html).then(function (result) {
-          if (result.ok) {
-            setStatus(label(date) + (good ? " · updated" : " · up to date"));
-            return saveGood(cache, html, date);
+  // Move the camera so a set of concepts fills the visible area, keeping the current viewing angle
+  function fitNodes(ids, ms) {
+    if (!Graph) return;
+    var pts = ids.map(function (id) { return nodeById[id]; }).filter(function (n) { return n && n.x != null; });
+    if (!pts.length) return;
+    var c = { x: 0, y: 0, z: 0 };
+    pts.forEach(function (n) { c.x += n.x; c.y += n.y; c.z += n.z; });
+    c.x /= pts.length; c.y /= pts.length; c.z /= pts.length;
+    var r = 0; pts.forEach(function (n) { r = Math.max(r, Math.hypot(n.x - c.x, n.y - c.y, n.z - c.z)); });
+    var cam = Graph.camera(), t = Graph.controls().target;
+    var fov = cam.fov * Math.PI / 180, aspect = Graph.width() / Graph.height();
+    var half = Math.min(fov / 2, Math.atan(Math.tan(fov / 2) * aspect));
+    var dist = Math.max(45, (r + 8) / Math.sin(half) * 1.08);
+    var dx = cam.position.x - t.x, dy = cam.position.y - t.y, dz = cam.position.z - t.z, dl = Math.hypot(dx, dy, dz) || 1;
+    Graph.cameraPosition({ x: c.x + dx / dl * dist, y: c.y + dy / dl * dist, z: c.z + dz / dl * dist }, c, ms || 900);
+  }
+  function fitFocus() {
+    if (!focus || !focus.selected) return;
+    var ids = [focus.selected];
+    Object.keys(focus.edges).forEach(function (id) {
+      var e = edgeById[id];
+      if (e.from === focus.selected) ids.push(e.to);
+      if (e.to === focus.selected) ids.push(e.from);
+    });
+    fitNodes(ids);
+  }
+
+  function selectNode(id, fly) {
+    var n = nodeById[id]; if (!n || n.isPattern) return;
+    var res = semanticNeighborhood(id);
+    collapseReciprocal(res, id);
+    addMeasurements(res, id);
+    focus = { nodes: res.nodes, edges: res.edges, selected: id, type: null };
+    setTypeButtons(null);
+    refreshStyles();
+    showPanel(n, res);
+    if (fly !== false) fitFocus();
+  }
+
+  function focusType(type) {
+    var primary = {}, context = {}, edges = {};
+    allNodes.forEach(function (n) { if (!n.isPattern && n.type === type) primary[n.id] = true; });
+    allEdges.forEach(function (e) {
+      if (e.isPattern) return;
+      if (primary[e.from] || primary[e.to]) {
+        edges[e.id] = true;
+        if (!primary[e.from]) context[e.from] = true;
+        if (!primary[e.to]) context[e.to] = true;
+      }
+    });
+    focus = { nodes: primary, edges: edges, context: context, selected: null, type: type };
+    hidePanel();
+    setTypeButtons(type);
+    refreshStyles();
+    labelNodes = Object.keys(primary).length <= 60 ? allNodes.filter(function (n) { return primary[n.id]; }) : [];
+    fitNodes(Object.keys(primary));
+  }
+
+  function clearFocus() {
+    var had = !!focus;
+    focus = null; hidePanel(); setTypeButtons(null); refreshStyles();
+    if (had && Graph) Graph.zoomToFit(800, 40);
+  }
+
+  // ---------- details panel ----------
+  function showPanel(n, res) {
+    $("pDot").style.background = n.color;
+    $("pName").textContent = n.label;
+    $("pType").textContent = prettyType(n.type) + (n.shortId ? " · " + n.shortId : "");
+    var rels = $("rels"); rels.innerHTML = "";
+    var direct = {}, second = [];
+    Object.keys(res.edges).forEach(function (id) {
+      var e = edgeById[id];
+      if (e.from === n.id || e.to === n.id) {
+        var out = e.from === n.id, key = (out ? "→ " : "← ") + prettyPredicate(e);
+        (direct[key] = direct[key] || []).push({ target: otherEnd(e, n.id), out: out });
+      } else second.push(e);
+    });
+    var keys = Object.keys(direct).sort(function (a, b) { return a.slice(2).localeCompare(b.slice(2)) || a.localeCompare(b); });
+    if (!keys.length && !second.length) {
+      var none = document.createElement("div"); none.className = "group"; none.textContent = "No relationships shown for this concept";
+      rels.appendChild(none);
+    }
+    keys.forEach(function (k) {
+      var g = document.createElement("div"); g.className = "group";
+      g.textContent = k.slice(2) + (k[0] === "→" ? "" : " · incoming") + " (" + direct[k].length + ")";
+      rels.appendChild(g);
+      direct[k].sort(function (a, b) { return nodeById[a.target].label.localeCompare(nodeById[b.target].label); })
+        .forEach(function (it) { rels.appendChild(relButton(it.target, it.out ? "→" : "←")); });
+    });
+    if (second.length) {
+      var g2 = document.createElement("div"); g2.className = "group"; g2.textContent = "One step further";
+      rels.appendChild(g2);
+      second.sort(function (a, b) { return nodeById[a.from].label.localeCompare(nodeById[b.from].label) || nodeById[a.to].label.localeCompare(nodeById[b.to].label); })
+        .forEach(function (e) { rels.appendChild(relButton(e.to, "↳", nodeById[e.from].label + " · " + prettyPredicate(e))); });
+    }
+    rels.scrollTop = 0;
+    $("panel").classList.add("open");
+    sizeGraph();
+  }
+  function sizeGraph() {
+    if (!Graph) return;
+    var panel = $("panel"), phone = innerWidth < 820;
+    var h = (phone && panel.classList.contains("open")) ? Math.max(200, innerHeight - panel.offsetHeight + 12) : innerHeight;
+    var w = (!phone && panel.classList.contains("open")) ? innerWidth - 384 : innerWidth;
+    if (Graph.height() !== h) Graph.height(h);
+    if (Graph.width() !== w) Graph.width(w);
+  }
+  function relButton(id, dir, via) {
+    var n = nodeById[id], b = document.createElement("button");
+    b.className = "rel"; b.type = "button";
+    var d = document.createElement("span"); d.className = "dir"; d.textContent = dir;
+    var dot = document.createElement("span"); dot.className = "dot"; dot.style.background = n.color;
+    var txt = document.createElement("span"); txt.textContent = n.label;
+    b.appendChild(d); b.appendChild(dot); b.appendChild(txt);
+    if (via) { var v = document.createElement("span"); v.className = "via"; v.textContent = " " + via; txt.appendChild(document.createElement("br")); txt.appendChild(v); }
+    b.addEventListener("click", function () { selectNode(id, true); });
+    return b;
+  }
+  function hidePanel() { $("panel").classList.remove("open"); sizeGraph(); }
+  $("pClose").addEventListener("click", clearFocus);
+
+  // ---------- type chips ----------
+  function buildTypeButtons() {
+    var info = {};
+    allNodes.forEach(function (n) {
+      if (n.isPattern || n.type.toLowerCase() === "generic") return;
+      (info[n.type] = info[n.type] || { color: n.color, count: 0 }).count++;
+    });
+    var box = $("types"); box.innerHTML = "";
+    Object.keys(info).sort().forEach(function (t) {
+      var b = document.createElement("button"); b.type = "button"; b.dataset.type = t;
+      var dot = document.createElement("span"); dot.className = "dot"; dot.style.background = info[t].color;
+      var s = document.createElement("span"); s.textContent = prettyType(t) + " (" + info[t].count + ")";
+      b.appendChild(dot); b.appendChild(s);
+      b.addEventListener("click", function () { if (focus && focus.type === t) clearFocus(); else focusType(t); });
+      box.appendChild(b);
+    });
+  }
+  function setTypeButtons(active) {
+    Array.prototype.forEach.call(document.querySelectorAll("#types button"), function (b) { b.classList.toggle("active", b.dataset.type === active); });
+  }
+  $("typesBtn").addEventListener("click", function () {
+    var open = $("types").classList.toggle("open"); this.setAttribute("aria-pressed", open ? "true" : "false");
+  });
+
+  // ---------- search ----------
+  var searchIndex = [];
+  function renderResults(q) {
+    var box = $("results"), term = q.trim().toLowerCase(); box.innerHTML = "";
+    if (!term) { box.classList.remove("open"); return; }
+    var hits = searchIndex.filter(function (s) { return s.text.indexOf(term) !== -1; })
+      .sort(function (a, b) { return (a.label.toLowerCase().indexOf(term) - b.label.toLowerCase().indexOf(term)) || a.label.localeCompare(b.label); })
+      .slice(0, 30);
+    if (!hits.length) { var none = document.createElement("div"); none.className = "none"; none.textContent = "No matching concepts"; box.appendChild(none); }
+    hits.forEach(function (h) {
+      var b = document.createElement("button"); b.type = "button";
+      var dot = document.createElement("span"); dot.className = "dot"; dot.style.background = h.color;
+      var s = document.createElement("span"); s.textContent = h.label + "  ·  " + prettyType(h.type);
+      b.appendChild(dot); b.appendChild(s);
+      b.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+      b.addEventListener("click", function () { $("search").value = h.label; box.classList.remove("open"); $("search").blur(); selectNode(h.id, true); });
+      box.appendChild(b);
+    });
+    box.classList.add("open");
+  }
+  $("search").addEventListener("input", function () { renderResults(this.value); });
+  $("search").addEventListener("focus", function () { if (this.value) renderResults(this.value); });
+  $("search").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { var first = $("results").querySelector("button"); if (first) first.click(); }
+    if (e.key === "Escape") { $("results").classList.remove("open"); this.blur(); }
+  });
+  document.addEventListener("pointerdown", function (e) { if (!$("searchWrap").contains(e.target)) $("results").classList.remove("open"); });
+
+  // ---------- labels drawn over the 3D view ----------
+  var FONT = getComputedStyle(document.body).fontFamily;
+  (function labelLoop() {
+    var c = $("labels"), ctx = c.getContext("2d");
+    function size() { var dpr = window.devicePixelRatio || 1; c.width = innerWidth * dpr; c.height = innerHeight * dpr; c.style.width = innerWidth + "px"; c.style.height = innerHeight + "px"; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+    size(); addEventListener("resize", size);
+    function frame() {
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      if (Graph && labelNodes.length) {
+        var cam = Graph.camera(), m = cam.matrixWorldInverse.elements;
+        ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.lineWidth = 3; ctx.strokeStyle = "rgba(5,7,12,0.85)";
+        var placed = [], visibleH = Graph.height();
+        labelNodes.forEach(function (n) {
+          if (n.x == null) return;
+          var zc = m[2] * n.x + m[6] * n.y + m[10] * n.z + m[14];
+          if (zc > 0) return;
+          var p = Graph.graph2ScreenCoords(n.x, n.y, n.z);
+          if (p.y > visibleH || p.y < 0 || p.x < 0 || p.x > innerWidth) return;
+          var sel = focus && n.id === focus.selected;
+          ctx.font = (sel ? "600 15px " : "12px ") + FONT;
+          var w = ctx.measureText(n.label).width, h = sel ? 17 : 14, y = p.y - (sel ? 10 : 7);
+          var box = { l: p.x - w / 2 - 2, r: p.x + w / 2 + 2, t: y - h, b: y + 1 };
+          for (var i = 0; i < placed.length; i++) {
+            var q = placed[i];
+            if (box.l < q.r && box.r > q.l && box.t < q.b && box.b > q.t) return;
           }
-          return showFallback(good && good.html !== html ? good : null,
-            "The newest map on GitHub would not load (" + result.why + ").");
+          placed.push(box);
+          ctx.fillStyle = sel ? "#ffffff" : "#d6dbe3";
+          ctx.strokeText(n.label, p.x, y); ctx.fillText(n.label, p.x, y);
         });
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  // ---------- building the 3D map ----------
+  function build(data, layoutKey) {
+    allNodes = data.nodes; allEdges = data.edges;
+    nodeById = {}; edgeIndex = {}; edgeById = {};
+    allNodes.forEach(function (n) { nodeById[n.id] = n; edgeIndex[n.id] = []; });
+    allEdges.forEach(function (e) { edgeById[e.id] = e; edgeIndex[e.from].push(e); edgeIndex[e.to].push(e); });
+    searchIndex = allNodes.filter(function (n) { return !n.isPattern; }).map(function (n) {
+      return { id: n.id, label: n.label, type: n.type, color: n.color, text: (n.label + " " + n.shortId + " " + n.type).toLowerCase() };
+    });
+    buildTypeButtons();
+
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem("cde-layout-" + layoutKey) || "null"); } catch (e) { saved = null; }
+    var placed = 0;
+    if (saved) allNodes.forEach(function (n) { var p = saved[n.id]; if (p) { n.x = p[0]; n.y = p[1]; n.z = p[2]; placed++; } });
+    var fullyPlaced = saved && placed === allNodes.length;
+    var engineFitDone = false;
+
+    Graph = ForceGraph3D({ controlType: "orbit" })($("graph"))
+      .backgroundColor("rgba(0,0,0,0)")
+      .showNavInfo(false)
+      .nodeId("id")
+      .nodeLabel(function (n) { return n.label + " (" + prettyType(n.type) + ")"; })
+      .nodeVal(function (n) { return Math.max(1.5, n.size / 5); })
+      .nodeRelSize(2.2)
+      .nodeResolution(10)
+      .nodeOpacity(0.95)
+      .nodeVisibility(function (n) {
+        if (!focus) return !n.isPattern;
+        return !!(focus.nodes[n.id] || (focus.context && focus.context[n.id]));
+      })
+      .linkDirectionalArrowRelPos(0.92)
+      .linkDirectionalParticleWidth(1.6)
+      .linkDirectionalParticleSpeed(0.006)
+      .onNodeClick(function (n) { selectNode(n.id, true); })
+      .onBackgroundClick(function () { clearFocus(); })
+      .warmupTicks(fullyPlaced ? 0 : 40)
+      .cooldownTicks(fullyPlaced ? 0 : 220)
+      .onEngineStop(function () {
+        if (!fullyPlaced && !focus && !engineFitDone) { engineFitDone = true; Graph.zoomToFit(800, 30); }
+        var pos = {};
+        allNodes.forEach(function (n) { pos[n.id] = [Math.round(n.x * 10) / 10, Math.round(n.y * 10) / 10, Math.round(n.z * 10) / 10]; });
+        try { localStorage.setItem("cde-layout-" + layoutKey, JSON.stringify(pos)); } catch (e) { /* storage full or blocked */ }
+      })
+      .graphData({ nodes: allNodes, links: allEdges });
+
+    Graph.d3Force("charge").strength(-38);
+    Graph.d3Force("link").distance(function (l) { return typeOf(l.from) === "AnatomicLocation" && typeOf(l.to) === "AnatomicLocation" ? 18 : 30; });
+    var controls = Graph.controls();
+    controls.autoRotateSpeed = 0.7;
+    controls.enableDamping = true;
+    refreshStyles();
+    setTimeout(function () { Graph.zoomToFit(700, 40); }, fullyPlaced ? 50 : 1800);
+
+    addEventListener("resize", sizeGraph);
+    messageEl.hidden = true;
+  }
+
+  $("spinBtn").addEventListener("click", function () {
+    if (!Graph) return;
+    var c = Graph.controls(); c.autoRotate = !c.autoRotate;
+    this.setAttribute("aria-pressed", c.autoRotate ? "true" : "false");
+  });
+  $("fitBtn").addEventListener("click", function () { if (!Graph) return; clearFocus(); $("search").value = ""; Graph.zoomToFit(700, 40); });
+
+  // ---------- start ----------
+  if (typeof ForceGraph3D === "undefined") {
+    messageEl.textContent = "The 3D map engine could not be loaded. Check your connection and try again.";
+    setStatus("Could not load the map", "error");
+    return;
+  }
+
+  Promise.all([openCache(), fetchCommitDate()]).then(function (r) {
+    var cache = r[0], date = r[1];
+    return readGood(cache).then(function (good) {
+      function useGood(reason) {
+        if (good && good.data) {
+          setStatus(reason + " Showing the last working copy" + (good.date ? " (" + good.date + ")" : "") + ".", "warn");
+          build(good.data, good.key);
+        } else {
+          messageEl.textContent = reason + " Check your connection and try again.";
+          setStatus("Could not load the map", "error");
+        }
+      }
+      return fetch(SOURCE, { cache: "no-cache" }).then(function (res) {
+        if (!res.ok) throw new Error("GitHub returned " + res.status);
+        return res.text();
+      }).then(function (html) {
+        var data;
+        try { data = extractData(html); } catch (e) { return useGood("The newest map on GitHub could not be read (" + e.message + ")."); }
+        var key = hashString(data.nodes.map(function (n) { return n.id; }).join("|") + "#" + data.edges.map(function (e) { return e.from + ">" + e.to; }).join("|"));
+        var changed = !good || good.key !== key;
+        setStatus((date ? "Map version of " + date : "Latest map") + (good && changed ? " · updated" : " · up to date"));
+        saveGood(cache, { data: data, key: key, date: date });
+        build(data, key);
       }, function () {
-        return showFallback(good, "You appear to be offline or GitHub is unreachable.");
+        useGood("You appear to be offline or GitHub is unreachable.");
       });
     });
   });
 
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.register("sw.js").catch(function () {});
-    });
+    addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
   }
 })();
 </script>
