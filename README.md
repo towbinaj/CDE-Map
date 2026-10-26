@@ -12,11 +12,10 @@ ACR-RSNA CDE team; this repository holds only the viewer.
 - On iPhone: open the page in Safari, tap Share, then **Add to Home Screen**.
 - **Trace:** tap a concept to see everything that leads into it ("Comes from") and everything it leads to ("Goes to"), step by step. **Steps** limits how far it follows the arrows. **Focus view** switches to RSNA's own view of the concept's relationships.
 - **Definitions:** shows each concept's definition (from the map file) and, under **Terms used**, the definition of each relationship term (from RSNA's [`relationships.jsonl`](https://github.com/RSNA/ACR-RSNA-CDEs/blob/next-gen-2026/docs/next-gen-schema/graph/relationships.jsonl)). RadLex gives no definitions for its anatomy relationships.
-
-- **Browse:** the **Map / Browse** switch at the top opens views built on RSNA's canonical graph: the reviewer's [definition graph](https://github.com/RSNA/ACR-RSNA-CDEs/blob/next-gen-2026/docs/next-gen-schema/alpha/graph/definition-graph.json) merged with the next-gen-schema [additions](https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/graph), following RSNA's own loader rules. Items from the additions are marked "proposed addition".
+- **Views:** the **Map · Card · Tree · List** switch moves between the 3D map and views built on RSNA's canonical graph: the reviewer's [definition graph](https://github.com/RSNA/ACR-RSNA-CDEs/blob/next-gen-2026/docs/next-gen-schema/alpha/graph/definition-graph.json) merged with the next-gen-schema [additions](https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/graph), following RSNA's own loader rules. The selected concept carries across: select it on the map and tap **Card**, or open a card and tap **Map**. Items from the additions are marked "proposed addition".
+  - **Card:** one concept in the layout of RSNA's "mat" pictures: anatomic scope, definition, elements and their values, measurements, linked concepts by relationship, codes, and what it inherits from the concepts above it.
+  - **Tree:** the "is a kind of" outline around the concept.
   - **List:** every concept, searchable, filtered by type and status.
-  - **Card:** one concept in the layout of RSNA's "mat" pictures: anatomic scope, definition, elements and their values, measurements, linked concepts by relationship, codes, and what it inherits from the concepts above it. **Card** in the map's panel opens the same view.
-  - **Tree:** the "is a kind of" outline around a concept.
 
 ## How it is kept working
 

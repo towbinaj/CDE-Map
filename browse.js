@@ -30,6 +30,7 @@
   var MATCH_WORDS = { closeMatch: " (close)", narrowMatch: " (narrower)", broadMatch: " (broader)", relatedMatch: " (related)" };
 
   var g = null, loading = null, hooks = {}, stack = [], state = null;
+  var current = null; // the concept being looked at, shared with the 3D map so switching views keeps it
   var filters = { q: "", type: 0, status: 0 };
   var $ = function (id) { return document.getElementById(id); };
 
@@ -77,8 +78,10 @@
   function show(next, push) {
     if (push && state) stack.push(state);
     state = next;
+    if (next.id) current = next.id;
     $("browse").hidden = false;
-    $("bBack").textContent = stack.length ? "‹ Back" : "‹ Map";
+    $("bBack").hidden = !stack.length;
+    if (hooks.onView) hooks.onView(next.view, current);
     var body = $("bBody"); body.innerHTML = "";
     if (!g) {
       body.appendChild(el("div", "bNote", "Loading RSNA's canonical graph…"));
@@ -92,13 +95,13 @@
     else renderMat(body, state.id);
     if (state.view !== "list") body.scrollTop = 0;
   }
-  function open(id) { show(id ? { view: "mat", id: id } : { view: "list" }, false); stack = []; $("bBack").textContent = "‹ Map"; }
-  function close() { $("browse").hidden = true; stack = []; state = null; if (hooks.onClose) hooks.onClose(); }
+  // view: "list", "mat" (card) or "tree"; id defaults to the current concept
+  function open(view, id) { stack = []; state = null; show({ view: view, id: view === "list" ? null : (id || current) }, false); }
+  function close() { $("browse").hidden = true; stack = []; state = null; if (hooks.onClose) hooks.onClose(current); }
   function go(view, id) { show({ view: view, id: id }, true); }
 
   // ---------- browse list ----------
   function renderList(body) {
-    $("bTitle").textContent = "Browse";
     var controls = el("div", "bControls");
     var q = el("input", "bSearch"); q.type = "search"; q.placeholder = "Narrow this list"; q.value = filters.q; q.setAttribute("aria-label", "Narrow this list");
     controls.appendChild(q);
@@ -164,7 +167,6 @@
   // ---------- mat: one concept and its links ----------
   function renderMat(body, id) {
     var n = node(id);
-    $("bTitle").textContent = "Card";
     if (!n) {
       var miss = el("div", "bNote");
       miss.textContent = nameOf(id) + " is not in RSNA's canonical graph. The 3D map adds RadLex anatomy around the concepts the graph references, for context.";
@@ -179,11 +181,6 @@
     var st = statusOf(n); if (st) kind.appendChild(badge(st));
     head.appendChild(kind);
     card.appendChild(head);
-
-    var actions = el("div", "matActions");
-    if (hasTree(id)) actions.appendChild(action("Tree", function () { go("tree", id); }));
-    if (hooks.mapNode && hooks.mapNode(id)) actions.appendChild(action("Show on map", function () { var x = id; close(); hooks.showOnMap(x); }));
-    if (actions.children.length) card.appendChild(actions);
 
     // Anatomic scope, own and inherited
     var scope = eff ? eff.scope : C.out(g, id, "SCOPED_TO").map(function (e) { return { edge: e, inherited_from: null }; });
@@ -231,7 +228,6 @@
     if (eff) card.appendChild(contextStrip(id, eff));
     body.appendChild(card);
   }
-  function action(label, fn) { var b = el("button", "btn", label); b.type = "button"; b.addEventListener("click", fn); return b; }
 
   function elementsSection(eff) {
     var sec = el("section", "matSec"); sec.appendChild(el("h3", null, "Elements"));
@@ -375,7 +371,6 @@
   // ---------- tree: the is-a outline ----------
   function parentsOf(id) { return C.out(g, id, "SUBTYPE_OF").map(function (e) { return e.to; }).filter(function (p) { return node(p); }); }
   function childrenOf(id) { return C.inn(g, id, "SUBTYPE_OF").map(function (e) { return e.from; }).filter(function (c) { return node(c); }); }
-  function hasTree(id) { return parentsOf(id).length > 0 || childrenOf(id).length > 0; }
   function rootsOf(id) {
     var roots = {}, seen = {}, stackIds = [id];
     while (stackIds.length) {
@@ -386,8 +381,9 @@
     return Object.keys(roots).sort(function (a, b) { return nameOf(a).localeCompare(nameOf(b)); });
   }
   function renderTree(body, id) {
-    $("bTitle").textContent = "Tree";
-    body.appendChild(el("div", "bNote", "“Is a kind of” outline around " + nameOf(id) + ". Tap a concept to open its card."));
+    if (!node(id)) { body.appendChild(el("div", "bNote", nameOf(id) + " is not in RSNA's canonical graph, so it has no tree here. The 3D map adds RadLex anatomy around the concepts the graph references, for context.")); return; }
+    var lonely = !parentsOf(id).length && !childrenOf(id).length;
+    body.appendChild(el("div", "bNote", lonely ? nameOf(id) + " has no “is a kind of” links in the canonical graph." : "“Is a kind of” outline around " + nameOf(id) + ". Tap a concept to open its card."));
     rootsOf(id).forEach(function (r) {
       var box = el("div", "tree"); var count = { n: 0 };
       outline(box, r, 0, {}, id, count);
@@ -406,12 +402,13 @@
   // ---------- wiring ----------
   function init(h) {
     hooks = h || {};
-    $("bBack").addEventListener("click", function () {
-      if (!stack.length) return close();
-      state = null; show(stack.pop(), false);
-      $("bBack").textContent = stack.length ? "‹ Back" : "‹ Map";
-    });
-    $("bListBtn").addEventListener("click", function () { go("list"); });
+    $("bBack").addEventListener("click", function () { if (stack.length) { state = null; show(stack.pop(), false); } });
   }
-  window.CDEBrowse = { init: init, open: open, close: close, load: load };
+  window.CDEBrowse = {
+    init: init, open: open, close: close, load: load,
+    isOpen: function () { return !$("browse").hidden; },
+    current: function () { return current; },
+    nameOf: function (id) { return g ? nameOf(id) : null; },
+    setCurrent: function (id) { current = id || current; }
+  };
 })();

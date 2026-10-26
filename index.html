@@ -36,7 +36,7 @@
   #graph { z-index: 1; }
 
   #bar {
-    position: fixed; z-index: 5; left: 0; right: 0; top: 0;
+    position: fixed; z-index: 8; left: 0; right: 0; top: 0;
     padding: calc(var(--top) + 8px) 12px 8px; display: flex; gap: 8px; align-items: center;
     background: linear-gradient(to bottom, rgba(7,9,15,0.92), rgba(7,9,15,0.55) 75%, rgba(7,9,15,0));
   }
@@ -66,19 +66,24 @@
   .btn:focus-visible, #results button:focus-visible, .rel:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   #status {
-    position: fixed; z-index: 4; left: 12px; right: 150px; top: calc(var(--top) + 54px);
+    position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 90px);
     font-size: 12px; color: var(--muted); pointer-events: none; text-shadow: 0 1px 3px #000;
   }
   /* Switch between the 3D map and the Browse views of RSNA's canonical graph */
-  #viewSwitch { position: fixed; z-index: 5; right: 12px; top: calc(var(--top) + 52px); display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--glass); }
-  #viewSwitch button { height: 28px; padding: 0 12px; border: 0; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
-  #viewSwitch button[aria-pressed="true"] { background: rgba(124,196,255,.16); color: var(--accent); }
+  /* One switch for every view; it keeps the selected concept. On the map it sits under the top bar, in Browse in the header */
+  #viewSwitch { position: fixed; z-index: 5; left: 12px; top: calc(var(--top) + 54px); display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--glass); }
+  #viewSwitch.inHead { position: static; }
+  #viewSwitch button { height: 30px; min-width: 52px; padding: 0 12px; border: 0; border-left: 1px solid var(--line); background: transparent; color: var(--text); font-size: 13px; cursor: pointer; }
+  #viewSwitch button:first-child { border-left: 0; }
+  #viewSwitch button[aria-pressed="true"] { background: rgba(124,196,255,.18); color: var(--accent); }
+  #viewSwitch button:disabled { color: #4b5263; cursor: default; }
 
   /* Browse, card (mat) and tree views */
   #browse { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--space); }
   #browse[hidden] { display: none; }
   #bHead { display: flex; align-items: center; gap: 8px; padding: calc(var(--top) + 8px) 12px 8px; border-bottom: 1px solid var(--line); background: #0c1018; }
-  #bTitle { flex: 1 1 auto; font-size: 17px; font-weight: 650; text-align: center; }
+  #bBack[hidden] { display: none; }
+  #bSlot { flex: 1 1 auto; display: flex; justify-content: center; }
   #bBody { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 12px calc(var(--bottom) + 24px); }
   #bBody > * { max-width: 860px; margin-left: auto; margin-right: auto; }
   .bNote { color: var(--muted); font-size: 14px; padding: 8px 2px 12px; line-height: 1.4; }
@@ -102,8 +107,6 @@
   .mat { border: 1px solid var(--line); border-top: 4px solid; border-radius: 10px; background: rgba(255,255,255,.03); padding: 12px; }
   .matHead h2 { margin: 0; font-size: 20px; }
   .matKind { margin-top: 3px; font: 11px ui-monospace, Menlo, monospace; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .matActions { display: flex; gap: 8px; margin: 10px 0 2px; }
-  .matActions .btn { height: 34px; font-size: 13px; }
   .matScope { margin-top: 10px; padding: 6px 8px; border-radius: 6px; background: rgba(245,158,11,.10); color: #f5c46b; font-size: 12.5px; line-height: 1.5; }
   .from { color: var(--muted); font-style: italic; }
   .matDef { margin: 10px 0 4px; font-size: 15px; line-height: 1.45; }
@@ -133,7 +136,7 @@
   #status.error { color: var(--error); }
 
   #types {
-    position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 88px);
+    position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 110px);
     display: none; flex-wrap: wrap; gap: 6px; max-height: 40vh; overflow-y: auto;
     padding: 8px; background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
   }
@@ -155,7 +158,7 @@
   }
   #panel.open { transform: translateY(0); }
   @media (min-width: 820px) {
-    #panel { left: auto; right: 12px; top: calc(var(--top) + 92px); bottom: 12px; width: 360px; max-height: none; border-radius: 14px; border: 1px solid var(--line); transform: translateX(110%); }
+    #panel { left: auto; right: 12px; top: calc(var(--top) + 64px); bottom: 12px; width: 360px; max-height: none; border-radius: 14px; border: 1px solid var(--line); transform: translateX(110%); }
     #panel.open { transform: translateX(0); }
     #types { right: auto; max-width: 560px; }
   }
@@ -210,8 +213,10 @@
 </div>
 <div id="status">Checking GitHub for the latest map…</div>
 <div id="viewSwitch" role="group" aria-label="View">
-  <button id="vMap" type="button" aria-pressed="true">Map</button>
-  <button id="vBrowse" type="button" aria-pressed="false">Browse</button>
+  <button id="vMap" type="button" aria-pressed="true" title="3D map">Map</button>
+  <button id="vCard" type="button" aria-pressed="false" title="Card of the selected concept">Card</button>
+  <button id="vTree" type="button" aria-pressed="false" title="&quot;Is a kind of&quot; outline of the selected concept">Tree</button>
+  <button id="vList" type="button" aria-pressed="false" title="List of all concepts">List</button>
 </div>
 <div id="types" role="group" aria-label="Concept types"></div>
 <div id="message">Loading the map…</div>
@@ -225,7 +230,6 @@
   <div id="pActions">
     <button id="pTrace" class="btn" title="Switch between Trace and RSNA's focus view">Focus view</button>
     <button id="pDefs" class="btn" aria-pressed="false" title="Show or hide definitions">Definitions</button>
-    <button id="pCard" class="btn" title="Open this concept's card from RSNA's canonical graph">Card</button>
     <div id="steps" role="group" aria-label="How many steps to follow" hidden>Steps
       <button class="btn" type="button" data-depth="1">1</button>
       <button class="btn" type="button" data-depth="2">2</button>
@@ -239,9 +243,8 @@
 
 <section id="browse" hidden aria-label="Browse RSNA's canonical graph">
   <header id="bHead">
-    <button id="bBack" class="btn" type="button">‹ Map</button>
-    <div id="bTitle">Browse</div>
-    <button id="bListBtn" class="btn" type="button">List</button>
+    <button id="bBack" class="btn" type="button" hidden>‹ Back</button>
+    <div id="bSlot"></div>
   </header>
   <div id="bBody"></div>
 </section>
@@ -547,7 +550,7 @@
 
   function clearFocus() {
     var had = !!focus;
-    setTrace(true);
+    setTrace(true); offMapConcept = null;
     focus = null; hidePanel(); setTypeButtons(null); refreshStyles();
     if (had && Graph) Graph.zoomToFit(800, 40);
   }
@@ -608,7 +611,7 @@
     b.addEventListener("click", function () { selectNode(id, true); });
     return b;
   }
-  function hidePanel() { $("panel").classList.remove("open"); sizeGraph(); }
+  function hidePanel() { $("panel").classList.remove("open"); sizeGraph(); refreshSwitch(); }
   $("pClose").addEventListener("click", clearFocus);
 
   // ---------- definitions ----------
@@ -619,6 +622,7 @@
   try { defsOn = localStorage.getItem("cde-defs") === "1"; } catch (e) { /* storage blocked */ }
   $("pDefs").setAttribute("aria-pressed", defsOn ? "true" : "false");
   function conceptHeader(n) {
+    offMapConcept = null; refreshSwitch();
     $("pDot").style.background = n.color;
     $("pName").textContent = n.label;
     $("pType").textContent = prettyType(n.type) + (n.shortId ? " · " + n.shortId : "");
@@ -977,20 +981,46 @@
   });
 
   // ---------- Browse views of RSNA's canonical graph (browse.js) ----------
-  function setView(browse) {
-    $("vMap").setAttribute("aria-pressed", browse ? "false" : "true");
-    $("vBrowse").setAttribute("aria-pressed", browse ? "true" : "false");
+  // The concept the views share: the map's selection, or the one last looked at in Browse
+  var offMapConcept = null; // a Browse concept that has no place on the 3D map, kept so Card and Tree can return to it
+  function sharedConcept() { return window.CDEBrowse && CDEBrowse.isOpen() ? CDEBrowse.current() : (focus && focus.selected) || offMapConcept; }
+  function updateSwitch(view) {
+    if (!window.CDEBrowse) { $("viewSwitch").hidden = true; return; }
+    var has = !!sharedConcept();
+    [["vMap", "map"], ["vCard", "mat"], ["vTree", "tree"], ["vList", "list"]].forEach(function (b) { $(b[0]).setAttribute("aria-pressed", b[1] === view ? "true" : "false"); });
+    $("vCard").disabled = !has; $("vTree").disabled = !has;
+  }
+  function refreshSwitch() { if (!(window.CDEBrowse && CDEBrowse.isOpen())) updateSwitch("map"); }
+  function openBrowse(view) {
+    if (!CDEBrowse.isOpen()) {
+      CDEBrowse.setCurrent((focus && focus.selected) || offMapConcept);
+      $("bSlot").appendChild($("viewSwitch")); $("viewSwitch").classList.add("inHead");
+    }
+    CDEBrowse.open(view);
   }
   if (window.CDEBrowse) {
     CDEBrowse.init({
       mapNode: function (id) { var n = nodeById[id]; return n && !n.isPattern ? n : null; },
-      showOnMap: function (id) { setView(false); if (Graph && nodeById[id]) selectNode(id, true); },
-      onClose: function () { setView(false); }
+      onView: function (view) { updateSwitch(view); },
+      onClose: function (id) {
+        document.body.insertBefore($("viewSwitch"), $("status").nextSibling); $("viewSwitch").classList.remove("inHead");
+        if (id && Graph && nodeById[id] && !nodeById[id].isPattern) { if (!(focus && focus.selected === id)) selectNode(id, true); }
+        else if (id && !(focus && focus.selected === id)) {
+          clearFocus(); offMapConcept = id;
+          // Concepts only in the canonical graph (such as groupings) have no place on the 3D map
+          var before = { text: statusEl.textContent, kind: statusEl.className };
+          setStatus("“" + (CDEBrowse.nameOf(id) || id) + "” isn't on the 3D map.", "warn");
+          setTimeout(function () { setStatus(before.text, before.kind); }, 4000);
+        }
+        updateSwitch("map");
+      }
     });
-    $("vBrowse").addEventListener("click", function () { setView(true); CDEBrowse.open(null); });
-    $("vMap").addEventListener("click", function () { CDEBrowse.close(); });
-    $("pCard").addEventListener("click", function () { if (focus && focus.selected) { setView(true); CDEBrowse.open(focus.selected); } });
+    $("vMap").addEventListener("click", function () { if (CDEBrowse.isOpen()) CDEBrowse.close(); });
+    $("vCard").addEventListener("click", function () { openBrowse("mat"); });
+    $("vTree").addEventListener("click", function () { openBrowse("tree"); });
+    $("vList").addEventListener("click", function () { openBrowse("list"); });
   }
+  updateSwitch("map");
 
   if ("serviceWorker" in navigator) {
     addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
