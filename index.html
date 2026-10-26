@@ -154,7 +154,7 @@
     <button id="pClose" class="btn">Close</button>
   </div>
   <div id="pActions">
-    <button id="pTrace" class="btn" aria-pressed="false" title="Show everything that leads into and out of this concept">Trace</button>
+    <button id="pTrace" class="btn" title="Switch between Trace and RSNA's focus view">Focus view</button>
     <div id="steps" role="group" aria-label="How many steps to follow" hidden>Steps
       <button class="btn" type="button" data-depth="1">1</button>
       <button class="btn" type="button" data-depth="2">2</button>
@@ -441,7 +441,7 @@
   }
 
   function focusType(type) {
-    setTrace(false);
+    setTrace(true);
     var primary = {}, context = {}, edges = {};
     allNodes.forEach(function (n) { if (!n.isPattern && n.type === type) primary[n.id] = true; });
     allEdges.forEach(function (e) {
@@ -462,7 +462,7 @@
 
   function clearFocus() {
     var had = !!focus;
-    setTrace(false);
+    setTrace(true);
     focus = null; hidePanel(); setTypeButtons(null); refreshStyles();
     if (had && Graph) Graph.zoomToFit(800, 40);
   }
@@ -527,7 +527,7 @@
   $("pClose").addEventListener("click", clearFocus);
 
   // ---------- trace: everything that leads into and out of a concept ----------
-  var traceOn = false, traceDepth = 0, traceIn = {}, traceOut = {}; // depth 0 = all steps
+  var traceOn = true, traceDepth = 0, traceIn = {}, traceOut = {}; // depth 0 = all steps
   var FROM_COLOR = "#f0b429", TO_COLOR = "#5fd4c4";
   // Anatomy links come in twin pairs (part of / has part). Follow only one of each pair, so chains don't loop back on themselves.
   function buildTraceIndex() {
@@ -605,8 +605,9 @@
     });
   }
   function setTrace(on) {
+    // Tapping a concept opens Trace; this button switches to RSNA's focus view and back
     traceOn = on;
-    $("pTrace").setAttribute("aria-pressed", on ? "true" : "false");
+    $("pTrace").textContent = on ? "Focus view" : "Trace";
   }
   $("pTrace").addEventListener("click", function () {
     if (!focus || !focus.selected) return;
