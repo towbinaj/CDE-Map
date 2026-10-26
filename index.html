@@ -71,6 +71,7 @@
   }
   #status.warn { color: var(--warn); }
   #status.error { color: var(--error); }
+  #status.hint { color: var(--accent); }
 
   #types {
     position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 76px);
@@ -103,7 +104,10 @@
   #panelHead .dot { width: 14px; height: 14px; margin-top: 4px; }
   #pName { font-size: 17px; font-weight: 650; line-height: 1.25; text-wrap: balance; }
   #pType { font-size: 12px; color: var(--muted); margin-top: 2px; letter-spacing: .02em; }
-  #pClose { margin-left: auto; height: 32px; min-width: 32px; padding: 0 10px; font-size: 13px; }
+  #pPath { margin-left: auto; }
+  #pPath, #pClose { height: 32px; min-width: 32px; padding: 0 10px; font-size: 13px; }
+  #pPath[hidden] + #pClose { margin-left: auto; }
+  .step { padding: 2px 6px 2px 30px; font-size: 12px; color: var(--muted); }
   #rels { overflow-y: auto; margin-top: 10px; -webkit-overflow-scrolling: touch; }
   .group { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
   .rel {
@@ -143,13 +147,15 @@
   <div id="panelHead">
     <span class="dot" id="pDot"></span>
     <div><div id="pName"></div><div id="pType"></div></div>
+    <button id="pPath" class="btn" title="Find how this concept connects to another one">Find path</button>
     <button id="pClose" class="btn">Close</button>
   </div>
   <div id="rels"></div>
   <div id="note">Unofficial viewer of the draft ACR-RSNA next-gen map, loaded live from the <a href="https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/alpha/visualizations" target="_blank" rel="noopener">RSNA repository</a>.</div>
 </section>
 
-<script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1.80.1/dist/3d-force-graph.min.js"></script>
+<script src="lib/3d-force-graph-1.80.1.min.js"></script>
+<script src="map-data.js"></script>
 <script>
 (function () {
   "use strict";
@@ -189,35 +195,7 @@
   })();
 
   // ---------- loading the RSNA data ----------
-  function extractData(html) {
-    var mn = /nodes = new vis\.DataSet\((\[[\s\S]*?\])\);/.exec(html);
-    var me = /edges = new vis\.DataSet\((\[[\s\S]*?\])\);/.exec(html);
-    if (!mn || !me) throw new Error("the map's data format changed");
-    var rawNodes = JSON.parse(mn[1]), rawEdges = JSON.parse(me[1]);
-    if (!rawNodes.length) throw new Error("the map has no concepts");
-    var nodes = rawNodes.map(function (n) {
-      var color = typeof n.color === "string" ? n.color : (n.color && (n.color.background || n.color.border)) || "#7F8C8D";
-      return {
-        id: String(n.id), label: String(n.label || n.id), type: String(n.ontologyType || "generic").trim(),
-        color: color, size: Number(n.size) || 15, shortId: n.shortId || "", isPattern: n.isPatternNode === true
-      };
-    });
-    var ids = {}; nodes.forEach(function (n) { ids[n.id] = true; });
-    var edges = [];
-    rawEdges.forEach(function (e, i) {
-      var from = String(e.from), to = String(e.to);
-      if (!ids[from] || !ids[to]) return;
-      var color = typeof e.color === "string" ? e.color : (e.color && e.color.color) || "#8a93a3";
-      edges.push({
-        id: "e" + i, source: from, target: to, from: from, to: to, color: color,
-        nativePredicate: e.nativePredicate || "", label: e.label || "", title: e.title || "",
-        inversePredicate: e.inversePredicate || "", semanticCategory: e.semanticCategory || "",
-        narrowValues: Array.isArray(e.narrowValues) ? e.narrowValues.map(String) : [],
-        isPattern: e.isPatternEdge === true
-      });
-    });
-    return { nodes: nodes, edges: edges };
-  }
+  var extractData = window.CDEMapData && CDEMapData.extractData;
 
   function openCache() { return ("caches" in window) ? caches.open(CACHE).catch(function () { return null; }) : Promise.resolve(null); }
   function readGood(cache) {
@@ -437,6 +415,10 @@
 
   function selectNode(id, fly) {
     var n = nodeById[id]; if (!n || n.isPattern) return;
+    if (pathFrom !== null) {
+      var from = pathFrom; endPathPick();
+      if (from !== id) return showPath(from, id);
+    }
     var res = semanticNeighborhood(id);
     collapseReciprocal(res, id);
     addMeasurements(res, id);
@@ -448,6 +430,7 @@
   }
 
   function focusType(type) {
+    endPathPick();
     var primary = {}, context = {}, edges = {};
     allNodes.forEach(function (n) { if (!n.isPattern && n.type === type) primary[n.id] = true; });
     allEdges.forEach(function (e) {
@@ -468,6 +451,7 @@
 
   function clearFocus() {
     var had = !!focus;
+    endPathPick();
     focus = null; hidePanel(); setTypeButtons(null); refreshStyles();
     if (had && Graph) Graph.zoomToFit(800, 40);
   }
@@ -477,6 +461,7 @@
     $("pDot").style.background = n.color;
     $("pName").textContent = n.label;
     $("pType").textContent = prettyType(n.type) + (n.shortId ? " · " + n.shortId : "");
+    $("pPath").hidden = false;
     var rels = $("rels"); rels.innerHTML = "";
     var direct = {}, second = [];
     Object.keys(res.edges).forEach(function (id) {
@@ -529,6 +514,73 @@
   }
   function hidePanel() { $("panel").classList.remove("open"); sizeGraph(); }
   $("pClose").addEventListener("click", clearFocus);
+
+  // ---------- path between two concepts ----------
+  var pathFrom = null, statusBeforePath = null;
+  function startPath() {
+    if (!focus || !focus.selected) return;
+    var from = focus.selected;
+    focus = null; hidePanel(); setTypeButtons(null); refreshStyles();
+    pathFrom = from;
+    labelNodes = [nodeById[from]];
+    statusBeforePath = { text: statusEl.textContent, kind: statusEl.className };
+    setStatus("Path from " + nodeById[from].label + ": tap or search a second concept. Tap empty space to cancel.", "hint");
+  }
+  function endPathPick() {
+    if (pathFrom === null) return;
+    pathFrom = null; labelNodes = [];
+    setStatus(statusBeforePath.text, statusBeforePath.kind);
+  }
+  // Fewest-steps route between two concepts, following links in either direction
+  function findPath(a, b) {
+    var prev = Object.create(null), queue = [a];
+    prev[a] = null;
+    for (var i = 0; i < queue.length && !(b in prev); i++) {
+      var id = queue[i];
+      edgeIndex[id].forEach(function (e) {
+        var nb = otherEnd(e, id);
+        if (e.isPattern || nodeById[nb].isPattern || nb in prev) return;
+        prev[nb] = e; queue.push(nb);
+      });
+    }
+    if (!(b in prev)) return null;
+    var steps = [];
+    for (var cur = b; cur !== a; cur = otherEnd(prev[cur], cur)) steps.unshift(prev[cur]);
+    return steps;
+  }
+  function showPath(a, b) {
+    var steps = findPath(a, b), order = [a], nodes = {}, edges = {};
+    (steps || []).forEach(function (e) { edges[e.id] = true; order.push(otherEnd(e, order[order.length - 1])); });
+    if (!steps) order.push(b);
+    order.forEach(function (id) { nodes[id] = true; });
+    focus = { nodes: nodes, edges: edges, selected: b, type: null };
+    setTypeButtons(null);
+    refreshStyles();
+    labelNodes = order.map(function (id) { return nodeById[id]; });
+
+    $("pDot").style.background = nodeById[a].color;
+    $("pName").textContent = nodeById[a].label + " → " + nodeById[b].label;
+    $("pType").textContent = !steps ? "No connection" : steps.length === 1 ? "Directly connected" : "Shortest path: " + steps.length + " steps";
+    $("pPath").hidden = true;
+    var rels = $("rels"); rels.innerHTML = "";
+    if (!steps) {
+      var none = document.createElement("div"); none.className = "group"; none.textContent = "These two concepts are not connected on the map";
+      rels.appendChild(none);
+    }
+    order.forEach(function (id, i) {
+      if (i > 0 && steps) {
+        var e = steps[i - 1], s = document.createElement("div"); s.className = "step";
+        s.textContent = (e.from === order[i - 1] ? "↓ " : "↑ ") + prettyPredicate(e);
+        rels.appendChild(s);
+      }
+      rels.appendChild(relButton(id, steps ? String(i + 1) : ""));
+    });
+    rels.scrollTop = 0;
+    $("panel").classList.add("open");
+    sizeGraph();
+    fitNodes(order);
+  }
+  $("pPath").addEventListener("click", startPath);
 
   // ---------- type chips ----------
   function buildTypeButtons() {
@@ -684,7 +736,7 @@
   $("fitBtn").addEventListener("click", function () { if (!Graph) return; clearFocus(); $("search").value = ""; Graph.zoomToFit(700, 40); });
 
   // ---------- start ----------
-  if (typeof ForceGraph3D === "undefined") {
+  if (typeof ForceGraph3D === "undefined" || !extractData) {
     messageEl.textContent = "The 3D map engine could not be loaded. Check your connection and try again.";
     setStatus("Could not load the map", "error");
     return;

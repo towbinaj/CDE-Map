@@ -1,0 +1,43 @@
+# Checks RSNA's ontology map every morning so a problem shows up as a GitHub issue (and an email)
+# instead of being noticed in the app. It only reads RSNA's file; it never changes the site.
+name: Check RSNA map
+
+on:
+  schedule:
+    - cron: "17 10 * * *" # daily, about 6 am Eastern
+  workflow_dispatch: # adds a "Run workflow" button on the Actions tab
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Read the latest map the way the viewer does
+        id: check
+        run: node .github/scripts/check-rsna-map.js
+
+      - name: Open an issue if something needs attention
+        if: steps.check.outputs.status != 'ok'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ steps.check.outputs.title }}
+        run: |
+          existing=$(gh issue list --state open --limit 200 --json title --jq "map(select(.title == env.TITLE)) | length")
+          if [ "$existing" = "0" ]; then
+            gh issue create --title "$TITLE" --body-file report.md
+          else
+            echo "An open issue with this title already exists."
+          fi
+
+      - name: Mark the run as failed if the viewer cannot read the map
+        if: steps.check.outputs.status == 'broken'
+        run: exit 1

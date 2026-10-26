@@ -1,10 +1,11 @@
 // Keeps the viewer and its 3D engine available offline. The map data is cached by the page.
-var SHELL = "cde-shell-v2";
-var FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
-var ENGINE = "https://cdn.jsdelivr.net/npm/3d-force-graph@1.80.1/dist/3d-force-graph.min.js";
+var SHELL = "cde-shell-v3";
+var FILES = ["./", "index.html", "map-data.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
+// The 3D engine is kept in this repository; its file name carries the version, so a saved copy never goes stale
+var ENGINE = new URL("lib/3d-force-graph-1.80.1.min.js", self.location).href;
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(SHELL).then(function (c) {
-    return c.addAll(FILES).then(function () { return c.add(ENGINE).catch(function () {}); });
+    return c.addAll(FILES.concat([ENGINE]));
   }).then(function () { return self.skipWaiting(); }));
 });
 self.addEventListener("activate", function (e) {
@@ -16,7 +17,6 @@ self.addEventListener("fetch", function (e) {
   if (e.request.method !== "GET") return;
   var url = new URL(e.request.url);
   if (e.request.url === ENGINE) {
-    // The engine version is pinned, so the saved copy never goes stale
     e.respondWith(caches.match(ENGINE).then(function (m) {
       return m || fetch(e.request).then(function (r) { var copy = r.clone(); caches.open(SHELL).then(function (c) { c.put(ENGINE, copy); }); return r; });
     }));
