@@ -1,0 +1,15 @@
+{
+  "name": "CDE Ontology Map",
+  "short_name": "CDE Map",
+  "description": "Unofficial viewer of the draft ACR-RSNA next-gen CDE ontology map, loaded live from the RSNA GitHub repository.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16181d",
+  "theme_color": "#16181d",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

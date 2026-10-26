@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CDE Ontology Map</title>
+<meta name="description" content="Unofficial viewer of the draft ACR-RSNA next-gen CDE ontology map, loaded live from the RSNA GitHub repository.">
+<meta name="theme-color" content="#16181d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CDE Map">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  /* Layout: a thin status strip on top, the map filling the rest of the screen */
+  :root {
+    --space: #16181d;
+    --strip: #1f2228;
+    --text: #e7e9ec;
+    --muted: #9aa1ab;
+    --warn: #f0b429;
+    --error: #ef6b6b;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; margin: 0; background: var(--space); color: var(--text); font-family: var(--font); }
+  body { display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px); box-sizing: border-box; }
+  #strip {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 6px 16px; background: var(--strip); font-size: 12px; line-height: 1.35; color: var(--muted);
+    border-bottom: 1px solid #2c3038;
+  }
+  #strip strong { color: var(--text); font-weight: 600; }
+  #status { margin-left: auto; font-variant-numeric: tabular-nums; }
+  #status.warn { color: var(--warn); }
+  #status.error { color: var(--error); }
+  #strip a { color: var(--muted); }
+  #frame { flex: 1 1 auto; width: 100%; border: 0; display: block; min-height: 0; background: var(--space); }
+  #message {
+    flex: 1 1 auto; display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 24px 16px; font-size: 15px; color: var(--muted);
+  }
+  #message[hidden], #frame[hidden] { display: none; }
+  #strip .short { display: none; }
+  @media (max-width: 600px) { #strip .long { display: none; } #strip .short { display: inline; } }
+</style>
+</head>
+<body>
+<div id="strip">
+  <span><strong>CDE Ontology Map</strong> <span class="short">· unofficial viewer</span><span class="long">· unofficial viewer of the draft ACR-RSNA next-gen map, loaded live from the <a href="https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/alpha/visualizations" target="_blank" rel="noopener">RSNA repository</a></span></span>
+  <span id="status">Checking GitHub for the latest map…</span>
+</div>
+<div id="message">Loading the map…</div>
+<iframe id="frame" title="CDE ontology map" hidden></iframe>
+
+<script>
+(function () {
+  "use strict";
+  var SOURCE = "https://raw.githubusercontent.com/RSNA/ACR-RSNA-CDEs/next-gen-2026/docs/next-gen-schema/alpha/visualizations/ontology_map.html";
+  var COMMITS = "https://api.github.com/repos/RSNA/ACR-RSNA-CDEs/commits?sha=next-gen-2026&per_page=1&path=docs/next-gen-schema/alpha/visualizations/ontology_map.html";
+  var CACHE = "cde-map-v1";
+  var GOOD_KEY = "/last-good-map.html";
+  var LOAD_TIMEOUT_MS = 150000;
+
+  var statusEl = document.getElementById("status");
+  var messageEl = document.getElementById("message");
+  var frame = document.getElementById("frame");
+
+  function setStatus(text, kind) {
+    statusEl.textContent = text;
+    statusEl.className = kind || "";
+  }
+
+  // Phone-friendly adjustments injected into the RSNA page
+  var MOBILE_CSS = [
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>",
+    "<style>",
+    "html,body{height:100%;background:#1a1a1a}",
+    "body>center{display:none}",
+    ".card{display:flex;flex-direction:column;height:100%;width:100%}",
+    "#ontology-toolbar{flex:0 0 auto;color-scheme:light}",
+    "#mynetwork{flex:1 1 auto;height:auto !important;min-height:0;float:none !important;border:0 !important}",
+    "#loadingBar{height:100% !important}",
+    "#ontology-type-filter-title{cursor:pointer;user-select:none}",
+    "#ontology-type-filter-title::after{content:' \\25BE'}",
+    "#ontology-type-filter.collapsed #ontology-type-buttons{display:none}",
+    "#ontology-type-filter.collapsed #ontology-type-filter-title{margin-bottom:2px}",
+    "#ontology-type-filter.collapsed #ontology-type-filter-title::after{content:' \\25B8'}",
+    "@media (max-width:760px){",
+    " div.vis-network div.vis-navigation{display:none !important}",
+    " #ontology-toolbar{flex-wrap:wrap !important;height:auto !important;padding:8px 10px !important;gap:6px !important}",
+    " #ontology-search-wrap{flex:1 1 100% !important;min-width:0 !important;width:100% !important}",
+    " #ontology-search{font-size:16px !important}",
+    " #ontology-controls{flex-wrap:wrap;gap:6px}",
+    " #ontology-controls button,.ontology-reset-selection{height:34px !important;padding:0 9px !important;font-size:13px !important;line-height:32px !important}",
+    " #ontology-type-filter{left:8px;right:8px;bottom:calc(8px + env(safe-area-inset-bottom,0px));width:auto !important;max-height:34vh;overflow-y:auto;padding:6px}",
+    " .outerBorder{left:50%;top:30vh !important;margin:0 !important;transform:translateX(-50%) scale(.55)}",
+    "}",
+    "</style>"
+  ].join("\n");
+
+  var MOBILE_JS = "<script>(function(){var f=document.getElementById('ontology-type-filter');var t=document.getElementById('ontology-type-filter-title');" +
+    "if(f&&t){if(window.matchMedia&&window.matchMedia('(max-width:760px)').matches)f.classList.add('collapsed');" +
+    "t.addEventListener('click',function(){f.classList.toggle('collapsed')});}})();<\/script>";
+
+  function looksLikeMap(html) {
+    return typeof html === "string" &&
+      html.indexOf("new vis.DataSet") !== -1 &&
+      html.indexOf('id="mynetwork"') !== -1;
+  }
+
+  var ERROR_TRAP = "<script>window.__mapErrors=[];window.addEventListener('error',function(e){window.__mapErrors.push(e.message||'unknown error')});<\/script>";
+
+  function adapt(html) {
+    var out = html;
+    out = /<head[^>]*>/i.test(out) ? out.replace(/<head[^>]*>/i, function (m) { return m + ERROR_TRAP; }) : ERROR_TRAP + out;
+    out = /<\/head>/i.test(out) ? out.replace(/<\/head>/i, MOBILE_CSS + "\n</head>") : MOBILE_CSS + out;
+    out = /<\/body>/i.test(out) ? out.replace(/<\/body>(?![\s\S]*<\/body>)/i, MOBILE_JS + "\n</body>") : out + MOBILE_JS;
+    return out;
+  }
+
+  // Render a map version and report whether it finished loading without errors
+  function render(html) {
+    return new Promise(function (resolve) {
+      var settled = false;
+      function done(ok, why) {
+        if (settled) return;
+        settled = true;
+        clearInterval(poll);
+        clearTimeout(timer);
+        resolve({ ok: ok, why: why });
+      }
+      frame.hidden = false;
+      messageEl.hidden = true;
+      frame.srcdoc = adapt(html);
+      var poll = setInterval(function () {
+        try {
+          var doc = frame.contentDocument;
+          if (!doc) return;
+          var errs = frame.contentWindow.__mapErrors;
+          if (errs && errs.length) { done(false, "the page reported an error: " + errs[0]); return; }
+          var bar = doc.getElementById("loadingBar");
+          var buttons = doc.querySelectorAll("#ontology-type-buttons button").length;
+          var network = frame.contentWindow.network;
+          if (bar && doc.readyState === "complete" && network &&
+              frame.contentWindow.getComputedStyle(bar).display === "none") {
+            done(buttons > 0, buttons > 0 ? "" : "the map loaded without its controls");
+          }
+        } catch (e) { /* keep waiting */ }
+      }, 500);
+      var timer = setTimeout(function () { done(false, "the map did not finish loading"); }, LOAD_TIMEOUT_MS);
+    });
+  }
+
+  function openCache() {
+    if (!("caches" in window)) return Promise.resolve(null);
+    return caches.open(CACHE).catch(function () { return null; });
+  }
+
+  function readGood(cache) {
+    if (!cache) return Promise.resolve(null);
+    return cache.match(GOOD_KEY).then(function (r) {
+      if (!r) return null;
+      return r.text().then(function (text) {
+        return { html: text, date: r.headers.get("x-map-date") || "" };
+      });
+    }).catch(function () { return null; });
+  }
+
+  function saveGood(cache, html, date) {
+    if (!cache) return Promise.resolve();
+    var headers = { "content-type": "text/html; charset=utf-8", "x-map-date": date || "" };
+    return cache.put(GOOD_KEY, new Response(html, { headers: headers })).catch(function () {});
+  }
+
+  function fetchLatest() {
+    return fetch(SOURCE, { cache: "no-cache" }).then(function (r) {
+      if (!r.ok) throw new Error("GitHub returned " + r.status);
+      return r.text();
+    });
+  }
+
+  function fetchCommitDate() {
+    return fetch(COMMITS, { cache: "no-cache" }).then(function (r) {
+      if (!r.ok) return "";
+      return r.json().then(function (j) {
+        var d = j && j[0] && j[0].commit && j[0].commit.committer && j[0].commit.committer.date;
+        return d ? new Date(d).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+      });
+    }).catch(function () { return ""; });
+  }
+
+  function label(date) { return date ? "Map version of " + date : "Latest map"; }
+
+  function showFallback(good, reason) {
+    if (good) {
+      setStatus(reason + " Showing the last working copy" + (good.date ? " (" + good.date + ")" : "") + ".", "warn");
+      return render(good.html);
+    }
+    frame.hidden = true;
+    messageEl.hidden = false;
+    messageEl.textContent = reason + " Check your connection and try again.";
+    setStatus("Could not load the map", "error");
+    return Promise.resolve();
+  }
+
+  Promise.all([openCache(), fetchCommitDate()]).then(function (res) {
+    var cache = res[0], date = res[1];
+    return readGood(cache).then(function (good) {
+      return fetchLatest().then(function (html) {
+        if (!looksLikeMap(html)) {
+          return showFallback(good, "The newest file on GitHub is not a map this viewer can show.");
+        }
+        if (good && good.html === html) {
+          setStatus(label(good.date || date) + " · up to date");
+          return render(html);
+        }
+        setStatus("Loading the newest map from GitHub…");
+        return render(html).then(function (result) {
+          if (result.ok) {
+            setStatus(label(date) + (good ? " · updated" : " · up to date"));
+            return saveGood(cache, html, date);
+          }
+          return showFallback(good && good.html !== html ? good : null,
+            "The newest map on GitHub would not load (" + result.why + ").");
+        });
+      }, function () {
+        return showFallback(good, "You appear to be offline or GitHub is unreachable.");
+      });
+    });
+  });
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+})();
+</script>
+</body>
+</html>
