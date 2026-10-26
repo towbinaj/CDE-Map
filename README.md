@@ -15,6 +15,6 @@ ACR-RSNA CDE team; this repository holds only the viewer.
 ## How it is kept working
 
 - The 3D drawing library ([3d-force-graph](https://github.com/vasturiano/3d-force-graph) 1.80.1, MIT license) is stored in `lib/`, so the viewer does not depend on an outside website.
-- A daily GitHub check (`.github/workflows/check-rsna-map.yml`) reads RSNA's latest map the same way the viewer does. If the viewer can no longer read it, or RSNA changed the focus rules this viewer copies, the check opens a GitHub issue here. It can also be run by hand from the **Actions** tab.
+- A daily GitHub check (`.github/workflows/check-rsna-map.yml`) reads RSNA's latest map the same way the viewer does. If the viewer can no longer read it, or RSNA changed the focus rules this viewer copies, the check opens a GitHub issue here. It also runs whenever the code that reads the map changes, and can be run by hand from the **Actions** tab.
 
 This is a draft work product, not an official ACR or RSNA release.
