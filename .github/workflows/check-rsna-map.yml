@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - map-data.js
+      - canonical.js
       - .github/scripts/check-rsna-map.js
       - .github/workflows/check-rsna-map.yml
       - .github/rsna-rules.sha256

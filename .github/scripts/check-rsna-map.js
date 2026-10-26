@@ -9,6 +9,7 @@ var fs = require("fs");
 var path = require("path");
 var crypto = require("crypto");
 var mapData = require("../../map-data.js");
+var canonical = require("../../canonical.js");
 
 var SOURCE = "https://raw.githubusercontent.com/RSNA/ACR-RSNA-CDEs/next-gen-2026/docs/next-gen-schema/alpha/visualizations/ontology_map.html";
 var RELS = "https://raw.githubusercontent.com/RSNA/ACR-RSNA-CDEs/next-gen-2026/docs/next-gen-schema/graph/relationships.jsonl";
@@ -25,7 +26,7 @@ function finish(status, title, lines) {
   console.log(status + ": " + title + "\n" + report);
 }
 
-function main(html, relsText) {
+function main(html, relsText, canon) {
   var data;
   try { data = mapData.extractData(html); } catch (e) {
     return finish("broken", "The viewer can no longer read RSNA's map", [
@@ -60,6 +61,11 @@ function main(html, relsText) {
     problems.push("- RSNA's list of relationship terms (`graph/relationships.jsonl`) could not be read, so the viewer can't show their definitions. It may have been moved or renamed. Source: " + RELS);
   }
 
+  if (canon !== undefined) {
+    if (canon.error) problems.push("- RSNA's canonical graph (used by the Browse, Card and Tree views) could not be loaded: " + canon.error + ".");
+    else canon.graph.problems.forEach(function (p) { problems.push("- Canonical graph: " + p + "."); });
+  }
+
   var counts = "Latest map: " + data.nodes.length + " concepts, " + data.edges.length + " links.";
   if (problems.length) {
     return finish("attention", "RSNA's map changed in a way the viewer may need to follow (" + rulesHash.slice(0, 8) + ")", [
@@ -67,6 +73,18 @@ function main(html, relsText) {
     ].concat(problems).concat(["", "Source: " + SOURCE]));
   }
   finish("ok", "RSNA's map reads correctly", [counts, "", "Focus rules unchanged."]);
+}
+
+// The base graph plus every graph/*.jsonl addition, merged the way the Browse views merge them
+function loadCanonical() {
+  return fetch(canonical.LISTING).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }).then(function (list) {
+    var names = Array.isArray(list) ? list.map(function (f) { return f.name; }).filter(function (n) { return /\.jsonl$/.test(n); }) : [];
+    if (!names.length) names = canonical.KNOWN_ADDITIONS;
+    return Promise.all([download(3, canonical.BASE)].concat(names.map(function (n) { return download(3, canonical.ADDITIONS + n); }))).then(function (texts) {
+      var graph = canonical.merge(JSON.parse(texts[0]), names.map(function (n, i) { return { name: n, text: texts[i + 1] }; }));
+      return { graph: graph };
+    });
+  }).catch(function (e) { return { error: e.message }; });
 }
 
 if (process.argv[2]) {
@@ -84,7 +102,9 @@ if (process.argv[2]) {
     });
   };
   download(3).then(function (html) {
-    return download(3, RELS).catch(function () { return ""; }).then(function (rels) { main(html, rels); });
+    return download(3, RELS).catch(function () { return ""; }).then(function (rels) {
+      return loadCanonical().then(function (canon) { main(html, rels, canon); });
+    });
   }, function (e) {
     finish("broken", "The viewer can no longer download RSNA's map", [
       e.message + ".",

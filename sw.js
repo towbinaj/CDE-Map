@@ -1,6 +1,6 @@
 // Keeps the viewer and its 3D engine available offline. The map data is cached by the page.
-var SHELL = "cde-shell-v3";
-var FILES = ["./", "index.html", "map-data.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
+var SHELL = "cde-shell-v4";
+var FILES = ["./", "index.html", "map-data.js", "canonical.js", "browse.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 // The 3D engine is kept in this repository; its file name carries the version, so a saved copy never goes stale
 var ENGINE = new URL("lib/3d-force-graph-1.80.1.min.js", self.location).href;
 self.addEventListener("install", function (e) {
