@@ -709,6 +709,35 @@
     requestAnimationFrame(frame);
   })();
 
+  // ---------- tapping concepts ----------
+  // A tap picks the nearest visible concept within a fingertip of the touch, so small dots don't need exact aim
+  var TAP_RADIUS = 30, TAP_MOVE = 10, pointers = {}, tapStart = null;
+  function nearestNode(x, y) {
+    var m = Graph.camera().matrixWorldInverse.elements, best = null, bestD = TAP_RADIUS;
+    allNodes.forEach(function (n) {
+      if (n.x == null || (n.isPattern && !(focus && focus.nodes[n.id]))) return;
+      if (m[2] * n.x + m[6] * n.y + m[10] * n.z + m[14] > 0) return; // behind the camera
+      var p = Graph.graph2ScreenCoords(n.x, n.y, n.z);
+      var d = Math.hypot(p.x - x, p.y - y) - (focus && focus.nodes[n.id] ? 6 : 0); // lit concepts win close calls
+      if (d < bestD) { bestD = d; best = n; }
+    });
+    return best;
+  }
+  $("graph").addEventListener("pointerdown", function (e) {
+    pointers[e.pointerId] = true;
+    tapStart = e.button === 0 && Object.keys(pointers).length === 1 ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
+  }, true);
+  function pointerEnd(e) {
+    delete pointers[e.pointerId];
+    var s = tapStart; tapStart = null;
+    if (e.type !== "pointerup" || !s || !Graph) return;
+    if (Math.hypot(e.clientX - s.x, e.clientY - s.y) > TAP_MOVE || Date.now() - s.t > 600) return; // a drag or a long press, not a tap
+    var n = nearestNode(e.clientX, e.clientY); // the map's canvas starts at the window's top-left corner
+    if (n) selectNode(n.id, true); else clearFocus();
+  }
+  $("graph").addEventListener("pointerup", pointerEnd, true);
+  $("graph").addEventListener("pointercancel", pointerEnd, true);
+
   // ---------- building the 3D map ----------
   function build(data, layoutKey) {
     allNodes = data.nodes; allEdges = data.edges;
@@ -742,8 +771,6 @@
       .linkDirectionalArrowRelPos(0.92)
       .linkDirectionalParticleWidth(1.6)
       .linkDirectionalParticleSpeed(0.006)
-      .onNodeClick(function (n) { selectNode(n.id, true); })
-      .onBackgroundClick(function () { clearFocus(); })
       .warmupTicks(fullyPlaced ? 0 : 40)
       .cooldownTicks(fullyPlaced ? 0 : 220)
       .onEngineStop(function () {
