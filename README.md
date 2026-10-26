@@ -10,7 +10,7 @@ ACR-RSNA CDE team; this repository holds only the viewer.
 - If a new version on GitHub fails to load, the viewer shows the last version that worked and says so.
 - If you are offline, it shows the last version it downloaded.
 - On iPhone: open the page in Safari, tap Share, then **Add to Home Screen**.
-- **Trace:** tap a concept, then **Trace** to see everything that leads into it ("Comes from") and everything it leads to ("Goes to"), step by step. **Steps** limits how far it follows the arrows.
+- **Trace:** tap a concept to see everything that leads into it ("Comes from") and everything it leads to ("Goes to"), step by step. **Steps** limits how far it follows the arrows. **Focus view** switches to RSNA's own view of the concept's relationships.
 
 ## How it is kept working
 
