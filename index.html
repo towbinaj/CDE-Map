@@ -104,9 +104,15 @@
   #panelHead .dot { width: 14px; height: 14px; margin-top: 4px; }
   #pName { font-size: 17px; font-weight: 650; line-height: 1.25; text-wrap: balance; }
   #pType { font-size: 12px; color: var(--muted); margin-top: 2px; letter-spacing: .02em; }
-  #pPath { margin-left: auto; }
-  #pPath, #pClose { height: 32px; min-width: 32px; padding: 0 10px; font-size: 13px; }
-  #pPath[hidden] + #pClose { margin-left: auto; }
+  #pClose { margin-left: auto; height: 32px; min-width: 32px; padding: 0 10px; font-size: 13px; }
+  #pActions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+  #pActions .btn { height: 32px; padding: 0 10px; font-size: 13px; }
+  #steps { display: flex; align-items: center; gap: 4px; margin-left: 4px; font-size: 12px; color: var(--muted); }
+  #steps .btn { min-width: 34px; padding: 0 8px; }
+  #pActions[hidden], #steps[hidden] { display: none; }
+  .group.from { color: #f0b429; }
+  .group.to { color: #5fd4c4; }
+  .away { margin: 6px 0 0 6px; font-size: 11px; color: var(--muted); }
   .step { padding: 2px 6px 2px 30px; font-size: 12px; color: var(--muted); }
   #rels { overflow-y: auto; margin-top: 10px; -webkit-overflow-scrolling: touch; }
   .group { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
@@ -147,8 +153,17 @@
   <div id="panelHead">
     <span class="dot" id="pDot"></span>
     <div><div id="pName"></div><div id="pType"></div></div>
-    <button id="pPath" class="btn" title="Find how this concept connects to another one">Find path</button>
     <button id="pClose" class="btn">Close</button>
+  </div>
+  <div id="pActions">
+    <button id="pTrace" class="btn" aria-pressed="false" title="Show everything that leads into and out of this concept">Trace</button>
+    <button id="pPath" class="btn" title="Find how this concept connects to another one">Find path</button>
+    <div id="steps" role="group" aria-label="How many steps to follow" hidden>Steps
+      <button class="btn" type="button" data-depth="1">1</button>
+      <button class="btn" type="button" data-depth="2">2</button>
+      <button class="btn" type="button" data-depth="3">3</button>
+      <button class="btn" type="button" data-depth="0">All</button>
+    </div>
   </div>
   <div id="rels"></div>
   <div id="note">Unofficial viewer of the draft ACR-RSNA next-gen map, loaded live from the <a href="https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/alpha/visualizations" target="_blank" rel="noopener">RSNA repository</a>.</div>
@@ -355,7 +370,7 @@
   function prettyPredicate(e) {
     var p = predicateOf(e) || e.label || "";
     p = p.replace(/^https?:\/\/[^#]*[\/#]/, "");
-    p = p.replace(/_/g, " ").toLowerCase().trim();
+    p = p.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase().trim().replace(/^sub class of$/, "subclass of");
     if (e.narrowValues.length || String(e.title).indexOf("Narrowed to:") !== -1) p += " (narrowed)";
     return p || "related to";
   }
@@ -372,8 +387,8 @@
     if (!Graph) return;
     Graph.nodeColor(nodeColor).nodeVisibility(Graph.nodeVisibility())
       .linkVisibility(function (l) { return !l.isPattern || (focus && focus.edges[l.id]); })
-      .linkColor(function (l) { return focus ? (focus.edges[l.id] ? l.color : "rgba(0,0,0,0)") : l.color; })
-      .linkWidth(function (l) { return focus && focus.edges[l.id] ? 0.6 : 0; })
+      .linkColor(function (l) { return focus ? (focus.edges[l.id] ? (focus.edgeColor && focus.edgeColor[l.id]) || l.color : "rgba(0,0,0,0)") : l.color; })
+      .linkWidth(function (l) { return focus && focus.edges[l.id] ? (focus.edgeColor ? 1.4 : 0.6) : 0; })
       .linkOpacity(focus ? 0.9 : 0.28)
       .linkDirectionalArrowLength(function (l) { return focus && focus.edges[l.id] ? 3.5 : 0; })
       .linkDirectionalParticles(function (l) { return focus && focus.selected && focus.edges[l.id] ? 2 : 0; });
@@ -419,6 +434,7 @@
       var from = pathFrom; endPathPick();
       if (from !== id) return showPath(from, id);
     }
+    if (traceOn) return showTrace(id, fly);
     var res = semanticNeighborhood(id);
     collapseReciprocal(res, id);
     addMeasurements(res, id);
@@ -430,7 +446,7 @@
   }
 
   function focusType(type) {
-    endPathPick();
+    endPathPick(); setTrace(false);
     var primary = {}, context = {}, edges = {};
     allNodes.forEach(function (n) { if (!n.isPattern && n.type === type) primary[n.id] = true; });
     allEdges.forEach(function (e) {
@@ -451,7 +467,7 @@
 
   function clearFocus() {
     var had = !!focus;
-    endPathPick();
+    endPathPick(); setTrace(false);
     focus = null; hidePanel(); setTypeButtons(null); refreshStyles();
     if (had && Graph) Graph.zoomToFit(800, 40);
   }
@@ -461,7 +477,7 @@
     $("pDot").style.background = n.color;
     $("pName").textContent = n.label;
     $("pType").textContent = prettyType(n.type) + (n.shortId ? " · " + n.shortId : "");
-    $("pPath").hidden = false;
+    $("pActions").hidden = false; $("steps").hidden = true;
     var rels = $("rels"); rels.innerHTML = "";
     var direct = {}, second = [];
     Object.keys(res.edges).forEach(function (id) {
@@ -561,7 +577,7 @@
     $("pDot").style.background = nodeById[a].color;
     $("pName").textContent = nodeById[a].label + " → " + nodeById[b].label;
     $("pType").textContent = !steps ? "No connection" : steps.length === 1 ? "Directly connected" : "Shortest path: " + steps.length + " steps";
-    $("pPath").hidden = true;
+    $("pActions").hidden = true;
     var rels = $("rels"); rels.innerHTML = "";
     if (!steps) {
       var none = document.createElement("div"); none.className = "group"; none.textContent = "These two concepts are not connected on the map";
@@ -581,6 +597,100 @@
     fitNodes(order);
   }
   $("pPath").addEventListener("click", startPath);
+
+  // ---------- trace: everything that leads into and out of a concept ----------
+  var traceOn = false, traceDepth = 0, traceIn = {}, traceOut = {}; // depth 0 = all steps
+  var FROM_COLOR = "#f0b429", TO_COLOR = "#5fd4c4";
+  // Anatomy links come in twin pairs (part of / has part). Follow only one of each pair, so chains don't loop back on themselves.
+  function buildTraceIndex() {
+    traceIn = {}; traceOut = {};
+    var byKey = {};
+    allEdges.forEach(function (e) { byKey[e.from + ">" + e.to + ">" + e.nativePredicate] = e; });
+    function rank(e) { var p = predicateOf(e).replace(/^.*[\/#]/, ""); return /(_Of|_In)$/i.test(p) ? 2 : /^(Has_|Contains)/i.test(p) ? 0 : 1; }
+    function order(e) { return Number(e.id.slice(1)); }
+    allEdges.forEach(function (e) {
+      if (e.isPattern || nodeById[e.from].isPattern || nodeById[e.to].isPattern) return;
+      var twin = e.inversePredicate && byKey[e.to + ">" + e.from + ">" + e.inversePredicate];
+      if (twin && twin !== e && (rank(twin) > rank(e) || (rank(twin) === rank(e) && order(twin) < order(e)))) return;
+      (traceOut[e.from] = traceOut[e.from] || []).push(e);
+      (traceIn[e.to] = traceIn[e.to] || []).push(e);
+    });
+  }
+  // Follows the arrows one way from a concept; records each concept's distance and the link that reached it
+  function walk(start, index, end, depth) {
+    var dist = Object.create(null), via = {}, queue = [start];
+    dist[start] = 0;
+    for (var i = 0; i < queue.length; i++) {
+      var id = queue[i];
+      if (depth && dist[id] >= depth) continue;
+      (index[id] || []).forEach(function (e) {
+        var nb = e[end];
+        if (nb in dist) return;
+        dist[nb] = dist[id] + 1; via[nb] = e; queue.push(nb);
+      });
+    }
+    delete dist[start];
+    return { dist: dist, via: via };
+  }
+  function showTrace(id, fly) {
+    var n = nodeById[id];
+    var up = walk(id, traceIn, "from", traceDepth), down = walk(id, traceOut, "to", traceDepth);
+    var nodes = {}, edges = {}, edgeColor = {};
+    nodes[id] = true;
+    [[up, FROM_COLOR], [down, TO_COLOR]].forEach(function (side) {
+      Object.keys(side[0].dist).forEach(function (k) { var e = side[0].via[k]; nodes[k] = true; edges[e.id] = true; edgeColor[e.id] = side[1]; });
+    });
+    focus = { nodes: nodes, edges: edges, edgeColor: edgeColor, selected: id, type: null };
+    setTypeButtons(null);
+    refreshStyles();
+
+    $("pDot").style.background = n.color;
+    $("pName").textContent = n.label;
+    $("pType").textContent = prettyType(n.type) + (n.shortId ? " · " + n.shortId : "");
+    $("pActions").hidden = false; $("steps").hidden = false;
+    Array.prototype.forEach.call(document.querySelectorAll("#steps button"), function (b) { b.setAttribute("aria-pressed", Number(b.dataset.depth) === traceDepth ? "true" : "false"); });
+    var rels = $("rels"); rels.innerHTML = "";
+    traceSection(rels, up, "Comes from", "from", "←", true);
+    traceSection(rels, down, "Goes to", "to", "→", false);
+    rels.scrollTop = 0;
+    $("panel").classList.add("open");
+    sizeGraph();
+    if (fly !== false) fitNodes(Object.keys(nodes));
+  }
+  function traceSection(rels, side, title, cls, arrow, incoming) {
+    var ids = Object.keys(side.dist).sort(function (a, b) { return side.dist[a] - side.dist[b] || nodeById[a].label.localeCompare(nodeById[b].label); });
+    var h = document.createElement("div"); h.className = "group " + cls; h.textContent = title + " (" + ids.length + ")";
+    rels.appendChild(h);
+    if (!ids.length) { var none = document.createElement("div"); none.className = "away"; none.textContent = "Nothing"; rels.appendChild(none); return; }
+    var last = 0;
+    ids.forEach(function (k) {
+      var d = side.dist[k], e = side.via[k], prev = otherEnd(e, k);
+      if (d !== last) {
+        last = d;
+        var s = document.createElement("div"); s.className = "away"; s.textContent = d === 1 ? "1 step away" : d + " steps away";
+        rels.appendChild(s);
+      }
+      // Reads as a sentence: "<concept> part of <prev>" coming in, "<prev> has value <concept>" going out
+      var via = prettyPredicate(e);
+      if (d > 1) via = incoming ? via + " " + nodeById[prev].label : nodeById[prev].label + " " + via;
+      rels.appendChild(relButton(k, arrow, via));
+    });
+  }
+  function setTrace(on) {
+    traceOn = on;
+    $("pTrace").setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  $("pTrace").addEventListener("click", function () {
+    if (!focus || !focus.selected) return;
+    setTrace(!traceOn);
+    selectNode(focus.selected, true);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll("#steps button"), function (b) {
+    b.addEventListener("click", function () {
+      traceDepth = Number(b.dataset.depth);
+      if (focus && focus.selected) showTrace(focus.selected, true);
+    });
+  });
 
   // ---------- type chips ----------
   function buildTypeButtons() {
@@ -676,6 +786,7 @@
     nodeById = {}; edgeIndex = {}; edgeById = {};
     allNodes.forEach(function (n) { nodeById[n.id] = n; edgeIndex[n.id] = []; });
     allEdges.forEach(function (e) { edgeById[e.id] = e; edgeIndex[e.from].push(e); edgeIndex[e.to].push(e); });
+    buildTraceIndex();
     searchIndex = allNodes.filter(function (n) { return !n.isPattern; }).map(function (n) {
       return { id: n.id, label: n.label, type: n.type, color: n.color, text: (n.label + " " + n.shortId + " " + n.type).toLowerCase() };
     });
