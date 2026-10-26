@@ -66,14 +66,74 @@
   .btn:focus-visible, #results button:focus-visible, .rel:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   #status {
-    position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 54px);
+    position: fixed; z-index: 4; left: 12px; right: 150px; top: calc(var(--top) + 54px);
     font-size: 12px; color: var(--muted); pointer-events: none; text-shadow: 0 1px 3px #000;
   }
+  /* Switch between the 3D map and the Browse views of RSNA's canonical graph */
+  #viewSwitch { position: fixed; z-index: 5; right: 12px; top: calc(var(--top) + 52px); display: flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--glass); }
+  #viewSwitch button { height: 28px; padding: 0 12px; border: 0; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; }
+  #viewSwitch button[aria-pressed="true"] { background: rgba(124,196,255,.16); color: var(--accent); }
+
+  /* Browse, card (mat) and tree views */
+  #browse { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--space); }
+  #browse[hidden] { display: none; }
+  #bHead { display: flex; align-items: center; gap: 8px; padding: calc(var(--top) + 8px) 12px 8px; border-bottom: 1px solid var(--line); background: #0c1018; }
+  #bTitle { flex: 1 1 auto; font-size: 17px; font-weight: 650; text-align: center; }
+  #bBody { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12px 12px calc(var(--bottom) + 24px); }
+  #bBody > * { max-width: 860px; margin-left: auto; margin-right: auto; }
+  .bNote { color: var(--muted); font-size: 14px; padding: 8px 2px 12px; line-height: 1.4; }
+  .bNote.warn { color: var(--warn); }
+  .bControls { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+  .bSearch { height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font-size: 16px; outline: none; }
+  .bChips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+  .bChip { flex: 0 0 auto; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text); font-size: 12px; cursor: pointer; }
+  .bChip[aria-pressed="true"] { background: #e8eaee; color: #0c1018; border-color: #e8eaee; }
+  .bCount { font-size: 12px; color: var(--muted); }
+  .bList { display: flex; flex-direction: column; gap: 6px; }
+  .bRow { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-left: 4px solid; border-radius: 8px; background: rgba(255,255,255,.03); color: var(--text); cursor: pointer; }
+  .bRowTop { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+  .bKind { font: 600 10px ui-monospace, Menlo, monospace; letter-spacing: .06em; }
+  .bName { font-size: 16px; font-weight: 600; }
+  .bTag { font: 10px ui-monospace, Menlo, monospace; color: #f5c46b; border: 1px solid rgba(245,196,107,.4); border-radius: 4px; padding: 1px 5px; text-transform: uppercase; }
+  .bDef { margin-top: 4px; font-size: 13px; color: #c9ced6; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .bMeta { margin-top: 5px; font: 11px ui-monospace, Menlo, monospace; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  .bBadge { font: 600 10px ui-monospace, Menlo, monospace; text-transform: uppercase; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px; border: 1px solid currentColor; color: var(--muted); }
+  .bBadge.published { color: #4ade80; } .bBadge.proposed { color: #f5c46b; } .bBadge.added { color: #fb923c; }
+  .mat { border: 1px solid var(--line); border-top: 4px solid; border-radius: 10px; background: rgba(255,255,255,.03); padding: 12px; }
+  .matHead h2 { margin: 0; font-size: 20px; }
+  .matKind { margin-top: 3px; font: 11px ui-monospace, Menlo, monospace; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .matActions { display: flex; gap: 8px; margin: 10px 0 2px; }
+  .matActions .btn { height: 34px; font-size: 13px; }
+  .matScope { margin-top: 10px; padding: 6px 8px; border-radius: 6px; background: rgba(245,158,11,.10); color: #f5c46b; font-size: 12.5px; line-height: 1.5; }
+  .from { color: var(--muted); font-style: italic; }
+  .matDef { margin: 10px 0 4px; font-size: 15px; line-height: 1.45; }
+  .matSyn { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.4; }
+  .matBadges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .matBadge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: rgba(139,92,246,.18); color: #c4b5fd; }
+  .matSec, .matCont { margin-top: 14px; }
+  .matSec h3, .matCont h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .matItem { padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .matLink { border: 0; background: none; padding: 0; color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; text-align: left; }
+  .matId { font: 11px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .matVals { margin-top: 2px; font-size: 13px; color: #c9ced6; line-height: 1.35; }
+  .matCont { border: 1px dashed var(--line); border-radius: 8px; padding: 8px; }
+  .matGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+  .mini { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 7px 10px; border: 1px solid var(--line); border-left: 4px solid; border-radius: 6px; background: rgba(255,255,255,.04); color: var(--text); cursor: pointer; }
+  .miniName { font-size: 14px; font-weight: 600; }
+  .miniKind { font: 10.5px ui-monospace, Menlo, monospace; color: var(--muted); }
+  .miniProps { font-size: 11.5px; color: #c9ced6; }
+  .matCodes { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .matContext { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .ctx b { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .ctx span { font-size: 12.5px; }
+  .tree { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 5px; }
+  .treeHead { font-size: 12px; color: var(--muted); padding: 2px 2px 4px; }
+  .treeRow.current { outline: 2px solid var(--accent); }
   #status.warn { color: var(--warn); }
   #status.error { color: var(--error); }
 
   #types {
-    position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 76px);
+    position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 88px);
     display: none; flex-wrap: wrap; gap: 6px; max-height: 40vh; overflow-y: auto;
     padding: 8px; background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
   }
@@ -95,7 +155,7 @@
   }
   #panel.open { transform: translateY(0); }
   @media (min-width: 820px) {
-    #panel { left: auto; right: 12px; top: calc(var(--top) + 64px); bottom: 12px; width: 360px; max-height: none; border-radius: 14px; border: 1px solid var(--line); transform: translateX(110%); }
+    #panel { left: auto; right: 12px; top: calc(var(--top) + 92px); bottom: 12px; width: 360px; max-height: none; border-radius: 14px; border: 1px solid var(--line); transform: translateX(110%); }
     #panel.open { transform: translateX(0); }
     #types { right: auto; max-width: 560px; }
   }
@@ -149,6 +209,10 @@
   <button id="fitBtn" class="btn" title="Show the whole map">Reset</button>
 </div>
 <div id="status">Checking GitHub for the latest map…</div>
+<div id="viewSwitch" role="group" aria-label="View">
+  <button id="vMap" type="button" aria-pressed="true">Map</button>
+  <button id="vBrowse" type="button" aria-pressed="false">Browse</button>
+</div>
 <div id="types" role="group" aria-label="Concept types"></div>
 <div id="message">Loading the map…</div>
 
@@ -161,6 +225,7 @@
   <div id="pActions">
     <button id="pTrace" class="btn" title="Switch between Trace and RSNA's focus view">Focus view</button>
     <button id="pDefs" class="btn" aria-pressed="false" title="Show or hide definitions">Definitions</button>
+    <button id="pCard" class="btn" title="Open this concept's card from RSNA's canonical graph">Card</button>
     <div id="steps" role="group" aria-label="How many steps to follow" hidden>Steps
       <button class="btn" type="button" data-depth="1">1</button>
       <button class="btn" type="button" data-depth="2">2</button>
@@ -172,8 +237,19 @@
   <div id="note">Unofficial viewer of the draft ACR-RSNA next-gen map, loaded live from the <a href="https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/alpha/visualizations" target="_blank" rel="noopener">RSNA repository</a>.</div>
 </section>
 
+<section id="browse" hidden aria-label="Browse RSNA's canonical graph">
+  <header id="bHead">
+    <button id="bBack" class="btn" type="button">‹ Map</button>
+    <div id="bTitle">Browse</div>
+    <button id="bListBtn" class="btn" type="button">List</button>
+  </header>
+  <div id="bBody"></div>
+</section>
+
 <script src="lib/3d-force-graph-1.80.1.min.js"></script>
 <script src="map-data.js"></script>
+<script src="canonical.js"></script>
+<script src="browse.js"></script>
 <script>
 (function () {
   "use strict";
@@ -899,6 +975,22 @@
       });
     });
   });
+
+  // ---------- Browse views of RSNA's canonical graph (browse.js) ----------
+  function setView(browse) {
+    $("vMap").setAttribute("aria-pressed", browse ? "false" : "true");
+    $("vBrowse").setAttribute("aria-pressed", browse ? "true" : "false");
+  }
+  if (window.CDEBrowse) {
+    CDEBrowse.init({
+      mapNode: function (id) { var n = nodeById[id]; return n && !n.isPattern ? n : null; },
+      showOnMap: function (id) { setView(false); if (Graph && nodeById[id]) selectNode(id, true); },
+      onClose: function () { setView(false); }
+    });
+    $("vBrowse").addEventListener("click", function () { setView(true); CDEBrowse.open(null); });
+    $("vMap").addEventListener("click", function () { CDEBrowse.close(); });
+    $("pCard").addEventListener("click", function () { if (focus && focus.selected) { setView(true); CDEBrowse.open(focus.selected); } });
+  }
 
   if ("serviceWorker" in navigator) {
     addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
