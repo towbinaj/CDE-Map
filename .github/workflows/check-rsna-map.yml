@@ -6,6 +6,13 @@ on:
   schedule:
     - cron: "17 10 * * *" # daily, about 6 am Eastern
   workflow_dispatch: # adds a "Run workflow" button on the Actions tab
+  push: # also re-check whenever the code that reads the map changes
+    branches: [main]
+    paths:
+      - map-data.js
+      - .github/scripts/check-rsna-map.js
+      - .github/workflows/check-rsna-map.yml
+      - .github/rsna-rules.sha256
 
 permissions:
   contents: read
