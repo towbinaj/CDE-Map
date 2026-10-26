@@ -71,7 +71,6 @@
   }
   #status.warn { color: var(--warn); }
   #status.error { color: var(--error); }
-  #status.hint { color: var(--accent); }
 
   #types {
     position: fixed; z-index: 4; left: 12px; right: 12px; top: calc(var(--top) + 76px);
@@ -113,8 +112,6 @@
   .group.from { color: #f0b429; }
   .group.to { color: #5fd4c4; }
   .away { margin: 6px 0 0 6px; font-size: 11px; color: var(--muted); }
-  .pick { margin: 2px 0 12px; font-size: 15px; line-height: 1.4; }
-  .step { padding: 2px 6px 2px 30px; font-size: 12px; color: var(--muted); }
   #rels { overflow-y: auto; margin-top: 10px; -webkit-overflow-scrolling: touch; }
   .group { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
   .rel {
@@ -158,7 +155,6 @@
   </div>
   <div id="pActions">
     <button id="pTrace" class="btn" aria-pressed="false" title="Show everything that leads into and out of this concept">Trace</button>
-    <button id="pPath" class="btn" title="Find how this concept connects to another one">Find path</button>
     <div id="steps" role="group" aria-label="How many steps to follow" hidden>Steps
       <button class="btn" type="button" data-depth="1">1</button>
       <button class="btn" type="button" data-depth="2">2</button>
@@ -433,10 +429,6 @@
 
   function selectNode(id, fly) {
     var n = nodeById[id]; if (!n || n.isPattern) return;
-    if (pathFrom !== null) {
-      var from = pathFrom; endPathPick();
-      if (from !== id) return showPath(from, id);
-    }
     if (traceOn) return showTrace(id, fly);
     var res = semanticNeighborhood(id);
     collapseReciprocal(res, id);
@@ -449,7 +441,7 @@
   }
 
   function focusType(type) {
-    endPathPick(); setTrace(false);
+    setTrace(false);
     var primary = {}, context = {}, edges = {};
     allNodes.forEach(function (n) { if (!n.isPattern && n.type === type) primary[n.id] = true; });
     allEdges.forEach(function (e) {
@@ -470,7 +462,7 @@
 
   function clearFocus() {
     var had = !!focus;
-    endPathPick(); setTrace(false);
+    setTrace(false);
     focus = null; hidePanel(); setTypeButtons(null); refreshStyles();
     if (had && Graph) Graph.zoomToFit(800, 40);
   }
@@ -533,89 +525,6 @@
   }
   function hidePanel() { $("panel").classList.remove("open"); sizeGraph(); }
   $("pClose").addEventListener("click", clearFocus);
-
-  // ---------- path between two concepts ----------
-  var pathFrom = null, statusBeforePath = null;
-  function startPath() {
-    if (!focus || !focus.selected) return;
-    var from = focus.selected, n = nodeById[from];
-    // Keep the starting concept lit and everything else grey, and say plainly what to do next
-    var only = {}; only[from] = true;
-    focus = { nodes: only, edges: {}, selected: from, type: null };
-    setTypeButtons(null); refreshStyles();
-    pathFrom = from;
-    labelNodes = [n];
-    statusBeforePath = { text: statusEl.textContent, kind: statusEl.className };
-    setStatus("Find path: tap or search the second concept", "hint");
-
-    $("pDot").style.background = n.color;
-    $("pName").textContent = "Find path from " + n.label;
-    $("pType").textContent = "Step 2 of 2";
-    $("pActions").hidden = true;
-    var rels = $("rels"); rels.innerHTML = "";
-    var help = document.createElement("div"); help.className = "pick";
-    help.textContent = "Now tap another concept on the map, or type its name in the search box at the top. The shortest chain of links between the two will be shown.";
-    var cancel = document.createElement("button"); cancel.type = "button"; cancel.className = "btn"; cancel.textContent = "Cancel";
-    cancel.addEventListener("click", function () { endPathPick(); selectNode(from, false); });
-    rels.appendChild(help); rels.appendChild(cancel);
-    $("panel").classList.add("open");
-    sizeGraph();
-  }
-  function endPathPick() {
-    if (pathFrom === null) return;
-    pathFrom = null; labelNodes = [];
-    setStatus(statusBeforePath.text, statusBeforePath.kind);
-  }
-  // Fewest-steps route between two concepts, following links in either direction
-  function findPath(a, b) {
-    var prev = Object.create(null), queue = [a];
-    prev[a] = null;
-    for (var i = 0; i < queue.length && !(b in prev); i++) {
-      var id = queue[i];
-      edgeIndex[id].forEach(function (e) {
-        var nb = otherEnd(e, id);
-        if (e.isPattern || nodeById[nb].isPattern || nb in prev) return;
-        prev[nb] = e; queue.push(nb);
-      });
-    }
-    if (!(b in prev)) return null;
-    var steps = [];
-    for (var cur = b; cur !== a; cur = otherEnd(prev[cur], cur)) steps.unshift(prev[cur]);
-    return steps;
-  }
-  function showPath(a, b) {
-    var steps = findPath(a, b), order = [a], nodes = {}, edges = {};
-    (steps || []).forEach(function (e) { edges[e.id] = true; order.push(otherEnd(e, order[order.length - 1])); });
-    if (!steps) order.push(b);
-    order.forEach(function (id) { nodes[id] = true; });
-    focus = { nodes: nodes, edges: edges, selected: b, type: null };
-    setTypeButtons(null);
-    refreshStyles();
-    labelNodes = order.map(function (id) { return nodeById[id]; });
-
-    $("pDot").style.background = nodeById[a].color;
-    $("pName").textContent = nodeById[a].label + " → " + nodeById[b].label;
-    $("pType").textContent = !steps ? "No connection" : steps.length === 1 ? "Directly connected" : "Shortest path: " + steps.length + " steps";
-    $("pActions").hidden = true;
-    var rels = $("rels"); rels.innerHTML = "";
-    if (!steps) {
-      var none = document.createElement("div"); none.className = "group"; none.textContent = "These two concepts are not connected on the map";
-      rels.appendChild(none);
-    }
-    order.forEach(function (id, i) {
-      if (i > 0 && steps) {
-        var e = steps[i - 1], s = document.createElement("div"); s.className = "step";
-        s.textContent = (e.from === order[i - 1] ? "↓ " : "↑ ") + prettyPredicate(e);
-        rels.appendChild(s);
-      }
-      rels.appendChild(relButton(id, steps ? String(i + 1) : ""));
-    });
-    rels.scrollTop = 0;
-    $("panel").classList.add("open");
-    sizeGraph();
-    fitNodes(order);
-  }
-  $("pPath").addEventListener("click", startPath);
 
   // ---------- trace: everything that leads into and out of a concept ----------
   var traceOn = false, traceDepth = 0, traceIn = {}, traceOut = {}; // depth 0 = all steps
