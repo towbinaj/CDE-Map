@@ -40,7 +40,8 @@
   // Anatomy the canonical graph only points at is named from the 3D map's data
   function nameOf(id) { var n = node(id); if (n) return n.name; var m = hooks.mapNode && hooks.mapNode(id); return m ? m.label : id; }
   function typeOf(id) { var n = node(id); if (n) return n.node; var m = hooks.mapNode && hooks.mapNode(id); return m ? m.type : "Concept"; }
-  function accent(type) { return ACCENT[type] || "#94a3b8"; }
+  // The 3D map's colour for each type, so a type looks the same in every view; RSNA's palette for types not on the map
+  function accent(type) { return (hooks.typeColor && hooks.typeColor(type)) || ACCENT[type] || "#94a3b8"; }
   function statusOf(n) { return n._added ? "added" : C.status(n); }
 
   // ---------- loading ----------
@@ -84,7 +85,7 @@
     if (hooks.onView) hooks.onView(next.view, current);
     var body = $("bBody"); body.innerHTML = "";
     if (!g) {
-      body.appendChild(el("div", "bNote", "Loading RSNA's canonical graph…"));
+      body.appendChild(el("div", "bNote", "Loading the canonical graph…"));
       load().then(function () { if (state === next) show(next, false); }, function (e) {
         body.innerHTML = ""; body.appendChild(el("div", "bNote", "The canonical graph could not be loaded (" + e.message + "). Check your connection and try again."));
       });
@@ -169,7 +170,7 @@
     var n = node(id);
     if (!n) {
       var miss = el("div", "bNote");
-      miss.textContent = nameOf(id) + " is not in RSNA's canonical graph. The 3D map adds RadLex anatomy around the concepts the graph references, for context.";
+      miss.textContent = nameOf(id) + " is not in the canonical graph. The 3D map adds RadLex anatomy around the concepts the graph references, for context.";
       body.appendChild(miss);
       return;
     }
@@ -231,35 +232,33 @@
 
   function elementsSection(eff) {
     var sec = el("section", "matSec"); sec.appendChild(el("h3", null, "Elements"));
+    var list = el("div", "miniList"); sec.appendChild(list);
     eff.elements.forEach(function (it) {
       var de = node(it.edge.to); if (!de) return;
-      var row = el("div", "matItem");
-      var t = el("button", "matLink", de.name); t.type = "button"; t.addEventListener("click", function () { go("mat", de.id); });
-      row.appendChild(t);
-      row.appendChild(el("span", "matId", " " + de.id + (de.select_cardinality ? " · " + de.select_cardinality + "-select" : "")));
-      if (it.inherited_from) row.appendChild(el("span", "from", " from " + nameOf(it.inherited_from)));
+      var row = mini(de.id, null);
+      var extra = [de.select_cardinality ? de.select_cardinality + "-select" : "", it.inherited_from ? "from " + nameOf(it.inherited_from) : ""].filter(Boolean).join(" · ");
       var narrow = it.edge.props.narrow, vals = C.values(g, de.id);
       if (Array.isArray(narrow) && narrow.length) vals = vals.filter(function (v) { return narrow.indexOf(v.id) !== -1; });
       var fixed = eff.value_constraints.filter(function (c) { return C.valueOwner(g, c.edge.to) === de.id; })[0];
       var vtxt = fixed ? "= " + nameOf(fixed.edge.to) + (fixed.edge.props.defining ? " (defining)" : " (fixed)") : vals.map(function (v) { return v.name; }).join(" · ");
-      if (vtxt) row.appendChild(el("div", "matVals", vtxt + (!fixed && Array.isArray(narrow) && narrow.length ? "  (narrowed)" : "")));
-      var mods = it.edge.props.modality; if (Array.isArray(mods) && mods.length) row.appendChild(el("div", "matVals", "on " + mods.join(", ")));
-      sec.appendChild(row);
+      if (vtxt) row.appendChild(el("span", "miniVals", vtxt + (!fixed && Array.isArray(narrow) && narrow.length ? "  (narrowed)" : "")));
+      var mods = it.edge.props.modality; if (Array.isArray(mods) && mods.length) extra += (extra ? " · " : "") + "on " + mods.join(", ");
+      if (extra) row.appendChild(el("span", "miniProps", extra));
+      list.appendChild(row);
     });
     return sec;
   }
   function measurementsSection(items) {
     var sec = el("section", "matSec"); sec.appendChild(el("h3", null, "Measurements"));
+    var list = el("div", "miniList"); sec.appendChild(list);
     items.forEach(function (it) {
       var ms = node(it.edge.to); if (!ms) return;
-      var row = el("div", "matItem");
-      var t = el("button", "matLink", ms.name); t.type = "button"; t.addEventListener("click", function () { go("mat", ms.id); });
-      row.appendChild(t);
-      row.appendChild(el("span", "matId", " " + ms.id + (ms.quantity_kind ? " · " + ms.quantity_kind : "")));
-      if (it.inherited_from) row.appendChild(el("span", "from", " from " + nameOf(it.inherited_from)));
+      var row = mini(ms.id, null);
       var detail = [(ms.permitted_units || []).join(", "), ms.method].filter(Boolean).join(" · ");
-      if (detail) row.appendChild(el("div", "matVals", detail));
-      sec.appendChild(row);
+      if (detail) row.appendChild(el("span", "miniVals", detail));
+      var extra = [ms.quantity_kind, it.inherited_from ? "from " + nameOf(it.inherited_from) : ""].filter(Boolean).join(" · ");
+      if (extra) row.appendChild(el("span", "miniProps", extra));
+      list.appendChild(row);
     });
     return sec;
   }
@@ -432,7 +431,7 @@
 
     // What it is a kind of
     var kind = section(body, "What it is a kind of");
-    if (!n || (!parentsOf(id).length && !childrenOf(id).length)) kind.appendChild(el("div", "bNote", "None recorded by RSNA yet."));
+    if (!n || (!parentsOf(id).length && !childrenOf(id).length)) kind.appendChild(el("div", "bNote", "None recorded yet."));
     else rootsOf(id).forEach(function (r) { var box = el("div", "tree"); outline(box, r, 0, {}, id, { n: 0 }); kind.appendChild(box); });
 
     // What you record about it

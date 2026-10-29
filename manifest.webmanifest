@@ -1,7 +1,7 @@
 {
   "name": "CDE Ontology Map",
   "short_name": "CDE Map",
-  "description": "Unofficial viewer of the draft ACR-RSNA next-gen CDE ontology map, loaded live from the RSNA GitHub repository.",
+  "description": "Unofficial viewer of the draft ACR-RSNA next-gen CDE ontology map, loaded live from the ACR-RSNA CDE GitHub repository.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

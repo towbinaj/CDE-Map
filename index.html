@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>CDE Ontology Map</title>
-<meta name="description" content="Unofficial 3D viewer of the draft ACR-RSNA next-gen CDE ontology map, loaded live from the RSNA GitHub repository.">
+<meta name="description" content="Unofficial 3D viewer of the draft ACR-RSNA next-gen CDE ontology map, loaded live from the ACR-RSNA CDE GitHub repository.">
 <meta name="theme-color" content="#07090f">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -125,6 +125,8 @@
   .miniName { font-size: 14px; font-weight: 600; }
   .miniKind { font: 10.5px ui-monospace, Menlo, monospace; color: var(--muted); }
   .miniProps { font-size: 11.5px; color: #c9ced6; }
+  .miniVals { font-size: 13px; line-height: 1.35; color: var(--text); margin-top: 2px; }
+  .miniList { display: flex; flex-direction: column; gap: 6px; }
   .matCodes { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.5; }
   .matContext { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
   .ctx b { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
@@ -134,7 +136,9 @@
   .treeRow.current { outline: 2px solid var(--accent); }
   .treeTitle h2 { margin: 0; font-size: 20px; }
   .treeTitle { margin-bottom: 4px; }
-  .treeSec { margin-top: 16px; }
+  .treeSec { margin-top: 34px; }
+  .treeSec .matSec { margin-top: 14px; }
+  .treeSec .matSec h3 { font-size: 10.5px; }
   .treeSec > h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
   .treeSec .bNote { padding: 0 2px; }
   #status.warn { color: var(--warn); }
@@ -233,7 +237,7 @@
     <button id="pClose" class="btn">Close</button>
   </div>
   <div id="pActions">
-    <button id="pTrace" class="btn" title="Switch between Trace and RSNA's focus view">Focus view</button>
+    <button id="pTrace" class="btn" title="Switch between Trace and the map's focus view">Focus view</button>
     <button id="pDefs" class="btn" aria-pressed="false" title="Show or hide definitions">Definitions</button>
     <div id="steps" role="group" aria-label="How many steps to follow" hidden>Steps
       <button class="btn" type="button" data-depth="1">1</button>
@@ -243,10 +247,10 @@
     </div>
   </div>
   <div id="rels"></div>
-  <div id="note">Unofficial viewer of the draft ACR-RSNA next-gen map, loaded live from the <a href="https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/alpha/visualizations" target="_blank" rel="noopener">RSNA repository</a>.</div>
+  <div id="note">Unofficial viewer of the draft ACR-RSNA next-gen map, loaded live from the <a href="https://github.com/RSNA/ACR-RSNA-CDEs/tree/next-gen-2026/docs/next-gen-schema/alpha/visualizations" target="_blank" rel="noopener">ACR-RSNA CDE repository</a>.</div>
 </section>
 
-<section id="browse" hidden aria-label="Browse RSNA's canonical graph">
+<section id="browse" hidden aria-label="Browse the canonical graph">
   <header id="bHead">
     <button id="bBack" class="btn" type="button" hidden>‹ Back</button>
     <div id="bSlot"></div>
@@ -1006,6 +1010,7 @@
   if (window.CDEBrowse) {
     CDEBrowse.init({
       mapNode: function (id) { var n = nodeById[id]; return n && !n.isPattern ? n : null; },
+      typeColor: function (type) { var n = allNodes.filter(function (x) { return x.type === type && !x.isPattern; })[0]; return n ? n.color : null; },
       mapLinks: function (id) { return (edgeIndex[id] || []).filter(function (e) { return e.from === id; }).map(function (e) { return { to: e.to, predicate: predicateOf(e) }; }); },
       onView: function (view) { updateSwitch(view); },
       onClose: function (id) {

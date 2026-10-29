@@ -40,6 +40,8 @@ Saved on the device: Cache API `cde-map-v2` (`/last-good-map.json`, `/last-good-
 - **Definitions** toggle (remembered on the device): concept definitions under each concept, plus a "Terms used" glossary.
 - **Map · Card · Tree · List** switch: the selected concept carries across views. Concepts that exist only in the canonical graph (groupings) show a note on the map.
 - Find path was built and then removed (Trace replaced it).
+- The Card, Tree and List use the 3D map's colour for each concept type, so a type looks the same everywhere. Every concept, element and measurement is a coloured-tab box.
+- Wording in the app and README is neutral: it is a joint ACR-RSNA project used by anyone, so avoid "RSNA's …". Repository names and links stay as they are.
 
 ## Testing before publishing
 
