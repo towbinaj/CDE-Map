@@ -132,6 +132,11 @@
   .tree { border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 5px; }
   .treeHead { font-size: 12px; color: var(--muted); padding: 2px 2px 4px; }
   .treeRow.current { outline: 2px solid var(--accent); }
+  .treeTitle h2 { margin: 0; font-size: 20px; }
+  .treeTitle { margin-bottom: 4px; }
+  .treeSec { margin-top: 16px; }
+  .treeSec > h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .treeSec .bNote { padding: 0 2px; }
   #status.warn { color: var(--warn); }
   #status.error { color: var(--error); }
 
@@ -1001,6 +1006,7 @@
   if (window.CDEBrowse) {
     CDEBrowse.init({
       mapNode: function (id) { var n = nodeById[id]; return n && !n.isPattern ? n : null; },
+      mapLinks: function (id) { return (edgeIndex[id] || []).filter(function (e) { return e.from === id; }).map(function (e) { return { to: e.to, predicate: predicateOf(e) }; }); },
       onView: function (view) { updateSwitch(view); },
       onClose: function (id) {
         document.body.insertBefore($("viewSwitch"), $("status").nextSibling); $("viewSwitch").classList.remove("inHead");
