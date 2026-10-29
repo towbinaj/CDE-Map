@@ -380,16 +380,94 @@
     }
     return Object.keys(roots).sort(function (a, b) { return nameOf(a).localeCompare(nameOf(b)); });
   }
+  // The Tree answers four questions about a concept, each from one kind of link:
+  // where it is (anatomic scope, then RadLex location links from the 3D map's data), what it is a kind of (SUBTYPE_OF),
+  // what you record about it (elements and measurements) and what can cause it (may manifest as / may cause)
+  var LOCATION_LINKS = { Part_Of: "part of", Regional_Part_Of: "part of", Constitutional_Part_Of: "part of", Branch_Of: "branch of",
+    Branch_Part_of: "branch of", Member_Of: "member of", Segment_Of: "segment of", Contained_In: "contained in" };
+  function locationParents(id) {
+    return (hooks.mapLinks ? hooks.mapLinks(id) : []).map(function (l) {
+      return { to: l.to, label: LOCATION_LINKS[String(l.predicate).replace(/^.*[\/#]/, "")] };
+    }).filter(function (l) { return l.label; });
+  }
+  // Every chain of location links upward from a place, outermost place first; each row notes how it sits in the one above
+  function locationChains(start) {
+    var chains = [];
+    (function walk(path) {
+      var here = path[path.length - 1].id;
+      var ups = locationParents(here).filter(function (l) { return !path.some(function (p) { return p.id === l.to; }); });
+      if (!ups.length || path.length >= 8 || chains.length >= 6) { chains.push(path.slice().reverse()); return; }
+      ups.forEach(function (l) {
+        var copy = path.slice(); copy[copy.length - 1] = { id: here, note: l.label + " " + nameOf(l.to) };
+        walk(copy.concat([{ id: l.to }]));
+      });
+    })([{ id: start }]);
+    return chains;
+  }
   function renderTree(body, id) {
-    if (!node(id)) { body.appendChild(el("div", "bNote", nameOf(id) + " is not in RSNA's canonical graph, so it has no tree here. The 3D map adds RadLex anatomy around the concepts the graph references, for context.")); return; }
-    var lonely = !parentsOf(id).length && !childrenOf(id).length;
-    body.appendChild(el("div", "bNote", lonely ? nameOf(id) + " has no “is a kind of” links in the canonical graph." : "“Is a kind of” outline around " + nameOf(id) + ". Tap a concept to open its card."));
-    rootsOf(id).forEach(function (r) {
-      var box = el("div", "tree"); var count = { n: 0 };
-      outline(box, r, 0, {}, id, count);
-      box.insertBefore(el("div", "treeHead", nameOf(r) + " · is-a outline · " + count.n + (count.n === 1 ? " concept" : " concepts")), box.firstChild);
-      body.appendChild(box);
+    var n = node(id), type = typeOf(id), eff = n ? C.effective(g, id) : null;
+    var head = el("div", "treeTitle"); head.appendChild(el("h2", null, nameOf(id)));
+    head.appendChild(el("div", "matKind", (KIND[type] || type.toUpperCase()) + " · " + id));
+    body.appendChild(head);
+
+    // Where it is
+    var where = section(body, "Where it is");
+    var places = type === "AnatomicLocation" ? [{ place: id }] : (eff ? eff.scope : (n ? C.out(g, id, "SCOPED_TO").map(function (e) { return { edge: e }; }) : []))
+      .map(function (s) { return { place: s.edge.to, from: s.inherited_from }; });
+    if (!places.length) where.appendChild(el("div", "bNote", "No location recorded."));
+    places.forEach(function (p) {
+      // One chain per place: the longest, with any other places each step belongs to noted on its row
+      var chain = locationChains(p.place).sort(function (a, b) { return b.length - a.length; })[0];
+      var box = el("div", "tree");
+      chain.forEach(function (row, i) {
+        var up = chain[i - 1], others = locationParents(row.id).filter(function (l) { return !up || l.to !== up.id; })
+          .map(function (l) { return l.label + " " + nameOf(l.to); });
+        var main = up ? locationParents(row.id).filter(function (l) { return l.to === up.id; })[0] : null;
+        var text = (main ? main.label + " " + nameOf(up.id) : "") + (others.length ? (main ? " · also " : "") + others.join(", ") : "");
+        box.appendChild(treeItem(row.id, text, i, row.id === id));
+      });
+      if (p.place !== id) box.appendChild(treeItem(id, "found in " + nameOf(p.place) + (p.from ? " (from " + nameOf(p.from) + ")" : ""), chain.length, true));
+      where.appendChild(box);
     });
+
+    // What it is a kind of
+    var kind = section(body, "What it is a kind of");
+    if (!n || (!parentsOf(id).length && !childrenOf(id).length)) kind.appendChild(el("div", "bNote", "None recorded by RSNA yet."));
+    else rootsOf(id).forEach(function (r) { var box = el("div", "tree"); outline(box, r, 0, {}, id, { n: 0 }); kind.appendChild(box); });
+
+    // What you record about it
+    if (eff && (eff.elements.length || eff.measurements.length)) {
+      var rec = section(body, "What you record about it");
+      if (eff.elements.length) rec.appendChild(elementsSection(eff));
+      if (eff.measurements.length) rec.appendChild(measurementsSection(eff.measurements));
+    } else if (type === "DataElement") {
+      var vals = section(body, "Its values");
+      var vbox = el("div", "tree");
+      C.values(g, id).forEach(function (v) { vbox.appendChild(treeItem(v.id, v.definition || "", 0, false)); });
+      vals.appendChild(vbox);
+    }
+
+    // What can cause it, and for a diagnosis how it shows up and what it causes
+    linkSection(body, "What can cause it", C.inn(g, id, "MAY_MANIFEST_AS").map(function (e) { return [e.from, "may manifest as " + nameOf(id)]; })
+      .concat(C.inn(g, id, "MAY_CAUSE").map(function (e) { return [e.from, "may cause " + nameOf(id)]; })));
+    linkSection(body, "How it can show up", C.out(g, id, "MAY_MANIFEST_AS").map(function (e) { return [e.to, nameOf(id) + " may manifest as this"]; }));
+    linkSection(body, "What it can cause", C.out(g, id, "MAY_CAUSE").map(function (e) { return [e.to, nameOf(id) + " may cause this"]; }));
+  }
+  function section(body, title) { var sec = el("section", "treeSec"); sec.appendChild(el("h3", null, title)); body.appendChild(sec); return sec; }
+  function linkSection(body, title, items) {
+    if (!items.length) return;
+    var box = el("div", "tree");
+    items.sort(function (a, b) { return nameOf(a[0]).localeCompare(nameOf(b[0])); }).forEach(function (it) { box.appendChild(treeItem(it[0], it[1], 0, false)); });
+    section(body, title).appendChild(box);
+  }
+  function treeItem(id, note, depth, isCurrent) {
+    var row = mini(id, null); row.classList.add("treeRow");
+    row.style.marginLeft = Math.min(depth, 6) * 16 + "px";
+    if (note) row.appendChild(el("span", "miniProps", note));
+    if (isCurrent) row.classList.add("current");
+    // Places only on the 3D map (RadLex anatomy) have no card, so open their own tree instead
+    if (!node(id)) row.addEventListener("click", function (e) { e.stopImmediatePropagation(); go("tree", id); }, true);
+    return row;
   }
   function outline(box, id, depth, seen, current, count) {
     if (seen[id]) return; seen[id] = true; count.n++;

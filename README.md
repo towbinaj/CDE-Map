@@ -28,7 +28,7 @@ Each time it opens, the viewer reads the latest files from the [RSNA/ACR-RSNA-CD
 - **Definitions:** shows each concept's definition (from the map file) and, under **Terms used**, the definition of each relationship term. RadLex gives no definitions for its anatomy relationships.
 - **Views:** the **Map · Card · Tree · List** switch moves between the 3D map and the canonical-graph views, keeping the selected concept: select it on the map and tap **Card**, or open a card and tap **Map**. Items from the additions are marked "proposed addition".
   - **Card:** one concept in the layout of RSNA's "mat" pictures: anatomic scope, definition, elements and their values, measurements, linked concepts by relationship, codes, and what it inherits from the concepts above it.
-  - **Tree:** the "is a kind of" outline around the concept.
+  - **Tree:** the concept in four labelled sections: **where it is** (its anatomy, then the RadLex places that anatomy is part of or contained in), **what it is a kind of** (parent and child terms), **what you record about it** (data elements with their values, and measurements), and **what can cause it** (for a diagnosis, also how it can show up and what it can cause).
   - **List:** every concept, searchable, filtered by type and status.
 - Works on phones and desktop browsers.
 
